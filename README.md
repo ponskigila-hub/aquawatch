@@ -1,8 +1,8 @@
-# 🌊 Aquaname
+# 🌊 aquawatch
 
 *(Formerly Jakarta Rain Alert)*
 
-**Aquaname** is a real-time global weather monitoring and notification system designed to track heavy rainfall, rising water levels, and potential flood risks worldwide. Currently in active development, the project has expanded from its original Jakarta-only scope to provide vital weather alerts and infrastructure simulations on a global scale.
+**aquawatch** is a real-time global weather monitoring and notification system designed to track heavy rainfall, rising water levels, and potential flood risks worldwide. Currently in active development, the project has expanded from its original Jakarta-only scope to provide vital weather alerts and infrastructure simulations on a global scale.
 
 ## 🌟 Key Features (Under Development)
 
@@ -22,8 +22,8 @@
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/ponskigila-hub/aquaname.git
-   cd aquaname
+   git clone https://github.com/ponskigila-hub/aquawatch.git
+   cd aquawatch
    ```
 
 2. Install dependencies:
