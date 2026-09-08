@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { RainfallChart } from '@/components/RainfallChart';
 import { WaterLevelChart } from '@/components/WaterLevelChart';
 import { AlertList } from '@/components/AlertList';
@@ -6,20 +6,27 @@ import { DistrictStats } from '@/components/DistrictStats';
 import { StatsOverview } from '@/components/StatsOverview';
 import { InsightsPanel } from '@/components/InsightsPanel';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { CitySearch } from '@/components/CitySearch';
+import { Button } from '@/components/ui/button';
 import { recentAlerts } from '@/data/mockData';
-import { Waves, Loader2 } from 'lucide-react';
+import { CitySearchResult } from '@/lib/openMeteo';
+import { Waves, Loader2, Globe as GlobeIcon, Map as MapIcon } from 'lucide-react';
 
-// The globe pulls in three.js, so it's lazy-loaded to keep the initial bundle light.
+// The globe pulls in three.js, so both views are lazy-loaded to keep the initial bundle light.
 const RiskGlobe = lazy(() => import('@/components/RiskGlobe').then((m) => ({ default: m.RiskGlobe })));
+const RiskMap2D = lazy(() => import('@/components/RiskMap2D').then((m) => ({ default: m.RiskMap2D })));
 
-const GlobeFallback = () => (
-  <div className="w-full h-[340px] sm:h-[420px] lg:h-[500px] rounded-lg border bg-[#0a1128] flex flex-col items-center justify-center gap-2 text-white/70">
+const MapFallback = () => (
+  <div className="w-full h-[340px] sm:h-[420px] lg:h-[500px] rounded-lg border bg-muted flex flex-col items-center justify-center gap-2 text-muted-foreground">
     <Loader2 className="w-6 h-6 animate-spin" />
-    <p className="text-xs">Loading globe…</p>
+    <p className="text-xs">Loading map…</p>
   </div>
 );
 
 const Index = () => {
+  const [viewMode, setViewMode] = useState<'globe' | 'map'>('globe');
+  const [searchedCity, setSearchedCity] = useState<CitySearchResult | null>(null);
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -66,16 +73,47 @@ const Index = () => {
         {/* Insights */}
         <InsightsPanel />
 
-        {/* Globe Section */}
+        {/* Map/Globe Section */}
         <section>
-          <div className="mb-3 sm:mb-4">
-            <h2 className="text-lg sm:text-xl font-semibold">Interactive Risk Globe</h2>
-            <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
-              Now tracking Jakarta, Indonesia — spin the globe and click a point for detailed data. More cities coming soon.
-            </p>
+          <div className="flex flex-wrap items-end justify-between gap-3 mb-3 sm:mb-4">
+            <div>
+              <h2 className="text-lg sm:text-xl font-semibold">Interactive Risk {viewMode === 'globe' ? 'Globe' : 'Map'}</h2>
+              <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
+                Now tracking Jakarta, Indonesia, plus live global flood &amp; storm activity. Search any city for live weather.
+              </p>
+            </div>
+            <div className="flex items-center gap-1 border rounded-lg p-1 bg-muted/40 shrink-0">
+              <Button
+                size="sm"
+                variant={viewMode === 'globe' ? 'default' : 'ghost'}
+                className="h-7 px-2.5 gap-1.5 text-xs"
+                onClick={() => setViewMode('globe')}
+              >
+                <GlobeIcon className="w-3.5 h-3.5" />
+                Globe
+              </Button>
+              <Button
+                size="sm"
+                variant={viewMode === 'map' ? 'default' : 'ghost'}
+                className="h-7 px-2.5 gap-1.5 text-xs"
+                onClick={() => setViewMode('map')}
+              >
+                <MapIcon className="w-3.5 h-3.5" />
+                Map
+              </Button>
+            </div>
           </div>
-          <Suspense fallback={<GlobeFallback />}>
-            <RiskGlobe />
+
+          <div className="mb-3">
+            <CitySearch onSelect={setSearchedCity} />
+          </div>
+
+          <Suspense fallback={<MapFallback />}>
+            {viewMode === 'globe' ? (
+              <RiskGlobe searchedCity={searchedCity} />
+            ) : (
+              <RiskMap2D searchedCity={searchedCity} />
+            )}
           </Suspense>
         </section>
 

@@ -214,7 +214,7 @@ const DistrictDetail = () => {
         <div>
           <div className="flex items-center gap-2 mb-3">
             <Compass className="w-4 h-4 text-foreground/60" />
-            <h2 className="font-semibold text-base sm:text-lg text-foreground">Other Nearby Districts</h2>
+            <h2 className="font-semibold text-base sm:text-lg text-foreground">Other Districts</h2>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {otherDistricts.map((d) => (

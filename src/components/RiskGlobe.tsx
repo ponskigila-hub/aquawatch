@@ -7,9 +7,10 @@ import { Button } from '@/components/ui/button';
 import { RiskBadge } from '@/components/RiskBadge';
 import { jakartaDistricts } from '@/data/mockData';
 import { fetchFloodStormEvents, EonetEvent } from '@/lib/eonet';
+import { fetchCityWeather, CitySearchResult } from '@/lib/openMeteo';
 import { DistrictData } from '@/types/flood';
 import { formatDistanceToNow } from 'date-fns';
-import { X, Droplets, Waves, Loader2, RotateCcw, Radio, ExternalLink } from 'lucide-react';
+import { X, Droplets, Waves, Loader2, RotateCcw, Radio, ExternalLink, Thermometer } from 'lucide-react';
 
 const riskColors: Record<string, string> = {
   safe: '#22c55e',
@@ -35,9 +36,14 @@ const JAKARTA_VIEW = { lat: -6.2, lng: 106.85, altitude: 1.7 };
 
 type GlobePoint =
   | { kind: 'district'; lat: number; lng: number; district: DistrictData }
-  | { kind: 'disaster'; lat: number; lng: number; event: EonetEvent };
+  | { kind: 'disaster'; lat: number; lng: number; event: EonetEvent }
+  | { kind: 'searched'; lat: number; lng: number; city: CitySearchResult };
 
-export const RiskGlobe = () => {
+interface RiskGlobeProps {
+  searchedCity?: CitySearchResult | null;
+}
+
+export const RiskGlobe = ({ searchedCity }: RiskGlobeProps) => {
   const globeRef = useRef<GlobeMethods | undefined>(undefined);
   const containerRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
@@ -49,6 +55,14 @@ export const RiskGlobe = () => {
     queryKey: ['eonet-flood-storm-events'],
     queryFn: fetchFloodStormEvents,
     staleTime: 15 * 60 * 1000,
+    retry: 1,
+  });
+
+  const { data: searchedWeather, isLoading: weatherLoading } = useQuery({
+    queryKey: ['city-weather', searchedCity?.id],
+    queryFn: () => fetchCityWeather(searchedCity!.lat, searchedCity!.lng),
+    enabled: !!searchedCity,
+    staleTime: 10 * 60 * 1000,
     retry: 1,
   });
 
@@ -66,7 +80,15 @@ export const RiskGlobe = () => {
     event: e,
   }));
 
-  const allPoints = useMemo(() => [...districtPoints, ...disasterPoints], [disasterEvents]);
+  const searchedPoint: GlobePoint | null = searchedCity
+    ? { kind: 'searched', lat: searchedCity.lat, lng: searchedCity.lng, city: searchedCity }
+    : null;
+
+  const allPoints = useMemo(
+    () => [...districtPoints, ...disasterPoints, ...(searchedPoint ? [searchedPoint] : [])],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [disasterEvents, searchedCity]
+  );
 
   // Fallback: three-globe's texture loader has no error handler, so if the
   // globe/bump image ever fails to load (flaky network, ad-blocker, CDN
@@ -105,6 +127,15 @@ export const RiskGlobe = () => {
     return () => controls.removeEventListener('start', stopRotation);
   }, [ready]);
 
+  // Fly to a searched city and open its info panel automatically
+  useEffect(() => {
+    if (!searchedCity || !ready || !globeRef.current) return;
+    globeRef.current.pointOfView({ lat: searchedCity.lat, lng: searchedCity.lng, altitude: 1.4 }, 1200);
+    const controls = globeRef.current.controls();
+    controls.autoRotate = false;
+    setSelected({ kind: 'searched', lat: searchedCity.lat, lng: searchedCity.lng, city: searchedCity });
+  }, [searchedCity, ready]);
+
   const handleRecenter = useCallback(() => {
     if (!globeRef.current) return;
     globeRef.current.pointOfView(JAKARTA_VIEW, 1000);
@@ -128,22 +159,26 @@ export const RiskGlobe = () => {
           width={dimensions.width}
           height={dimensions.height}
           backgroundColor="#0a1128"
-          globeImageUrl="/globe/earth-blue-marble.jpg"
+          globeImageUrl="/globe/earth-day.jpg"
           bumpImageUrl="/globe/earth-topology.png"
-          atmosphereColor="#3a9bdc"
-          atmosphereAltitude={0.2}
+          atmosphereColor="#7dd3fc"
+          atmosphereAltitude={0.28}
           onGlobeReady={() => setReady(true)}
           pointsData={allPoints}
           pointLat="lat"
           pointLng="lng"
           pointColor={(p: any) => {
             const point = p as GlobePoint;
-            return point.kind === 'district' ? riskColors[point.district.riskLevel] : disasterColor(point.event.category);
+            if (point.kind === 'district') return riskColors[point.district.riskLevel];
+            if (point.kind === 'disaster') return disasterColor(point.event.category);
+            return '#eab308'; // searched city marker
           }}
-          pointAltitude={0.02}
+          pointAltitude={(p: any) => ((p as GlobePoint).kind === 'searched' ? 0.03 : 0.02)}
           pointRadius={(p: any) => {
             const point = p as GlobePoint;
-            return point.kind === 'district' ? 0.35 + point.district.rainfall / 150 : 0.3;
+            if (point.kind === 'district') return 0.35 + point.district.rainfall / 150;
+            if (point.kind === 'searched') return 0.55;
+            return 0.3;
           }}
           pointLabel={(p: any) => {
             const point = p as GlobePoint;
@@ -153,31 +188,28 @@ export const RiskGlobe = () => {
                 <b>${d.name}</b><br/>${d.rainfall}mm rainfall · ${d.waterLevel}cm water
               </div>`;
             }
+            if (point.kind === 'searched') {
+              return `<div style="font-family:inherit;background:rgba(15,23,42,0.9);color:white;padding:6px 10px;border-radius:6px;font-size:12px;">
+                <b>${point.city.name}</b><br/>${point.city.country}
+              </div>`;
+            }
             const e = point.event;
             return `<div style="font-family:inherit;background:rgba(15,23,42,0.9);color:white;padding:6px 10px;border-radius:6px;font-size:12px;max-width:220px;">
               <b>${e.title}</b><br/>${e.category} · NASA EONET
             </div>`;
           }}
           onPointClick={(p: any) => setSelected(p as GlobePoint)}
-          ringsData={disasterPoints}
+          ringsData={[...disasterPoints, ...(searchedPoint ? [searchedPoint] : [])]}
           ringLat="lat"
           ringLng="lng"
           ringColor={(p: any) => {
-            const color = disasterColor((p as GlobePoint & { kind: 'disaster' }).event.category);
+            const point = p as GlobePoint;
+            const color = point.kind === 'searched' ? '#eab308' : disasterColor((point as any).event.category);
             return (t: number) => hexToRgba(color, 1 - t);
           }}
           ringMaxRadius={2.2}
           ringPropagationSpeed={1.8}
           ringRepeatPeriod={1400}
-          labelsData={districtPoints}
-          labelLat="lat"
-          labelLng="lng"
-          labelText={(p: any) => (p as GlobePoint & { kind: 'district' }).district.name}
-          labelSize={1.1}
-          labelDotRadius={0}
-          labelColor={() => 'rgba(255,255,255,0.85)'}
-          labelAltitude={0.021}
-          labelResolution={2}
         />
 
         {/* Recenter control */}
@@ -207,7 +239,7 @@ export const RiskGlobe = () => {
           <div className="absolute bottom-3 left-3 right-3 sm:left-3 sm:right-auto sm:w-80 z-20 animate-in fade-in slide-in-from-bottom-2 duration-200">
             <Card className="border-2 shadow-xl">
               <CardContent className="p-4">
-                {selected.kind === 'district' ? (
+                {selected.kind === 'district' && (
                   <>
                     <div className="flex items-start justify-between gap-2 mb-2">
                       <h3 className="font-semibold text-sm sm:text-base text-foreground">{selected.district.name}</h3>
@@ -236,7 +268,9 @@ export const RiskGlobe = () => {
                       View full details →
                     </Button>
                   </>
-                ) : (
+                )}
+
+                {selected.kind === 'disaster' && (
                   <>
                     <div className="flex items-start justify-between gap-2 mb-2">
                       <h3 className="font-semibold text-sm sm:text-base text-foreground leading-snug pr-2">
@@ -271,6 +305,47 @@ export const RiskGlobe = () => {
                     )}
                   </>
                 )}
+
+                {selected.kind === 'searched' && (
+                  <>
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <div>
+                        <h3 className="font-semibold text-sm sm:text-base text-foreground">{selected.city.name}</h3>
+                        <p className="text-xs text-foreground/60">
+                          {selected.city.admin1 ? `${selected.city.admin1}, ` : ''}
+                          {selected.city.country}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => setSelected(null)}
+                        className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
+                        aria-label="Close"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                    {weatherLoading ? (
+                      <div className="flex items-center gap-2 text-xs text-foreground/60 py-2">
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        Fetching live weather…
+                      </div>
+                    ) : searchedWeather ? (
+                      <div className="flex items-center gap-4 text-xs sm:text-sm text-foreground/70 mb-3">
+                        <span className="flex items-center gap-1">
+                          <Droplets className="w-3.5 h-3.5" />
+                          {searchedWeather.rainfallTodayMm}mm today
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <Thermometer className="w-3.5 h-3.5" />
+                          {Math.round(searchedWeather.tempC)}°C
+                        </span>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-foreground/60 mb-3">Live weather unavailable right now.</p>
+                    )}
+                    <p className="text-[11px] text-foreground/50">Live data from Open-Meteo</p>
+                  </>
+                )}
               </CardContent>
             </Card>
           </div>
@@ -294,11 +369,15 @@ export const RiskGlobe = () => {
           <div className="w-px h-4 bg-border hidden sm:block" />
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-full" style={{ backgroundColor: disasterColors.Floods }} />
-            <span className="whitespace-nowrap text-muted-foreground">Flood <span className="text-foreground/70">(live, worldwide)</span></span>
+            <span className="whitespace-nowrap text-muted-foreground">Flood <span className="text-foreground/70">(live)</span></span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-full" style={{ backgroundColor: disasterColors['Severe Storms'] }} />
-            <span className="whitespace-nowrap text-muted-foreground">Storm <span className="text-foreground/70">(live, worldwide)</span></span>
+            <span className="whitespace-nowrap text-muted-foreground">Storm <span className="text-foreground/70">(live)</span></span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-full bg-yellow-500" />
+            <span className="whitespace-nowrap text-muted-foreground">Searched city</span>
           </div>
         </div>
       </CardContent>
