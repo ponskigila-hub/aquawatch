@@ -111,9 +111,12 @@ export const RiskGlobe = ({ searchedCity }: RiskGlobeProps) => {
     return () => window.removeEventListener('resize', updateSize);
   }, []);
 
-  // Initial camera position + gentle auto-rotate until the user interacts
+  // Initial camera position + gentle auto-rotate. Runs on mount rather than
+  // waiting for `ready`, since controls()/pointOfView() are available as
+  // soon as the Globe component mounts — texture loading happens separately
+  // and shouldn't block camera setup.
   useEffect(() => {
-    if (!ready || !globeRef.current) return;
+    if (!globeRef.current) return;
     globeRef.current.pointOfView(JAKARTA_VIEW, 0);
     const controls = globeRef.current.controls();
     controls.autoRotate = true;
@@ -125,16 +128,16 @@ export const RiskGlobe = ({ searchedCity }: RiskGlobeProps) => {
     };
     controls.addEventListener('start', stopRotation);
     return () => controls.removeEventListener('start', stopRotation);
-  }, [ready]);
+  }, []);
 
   // Fly to a searched city and open its info panel automatically
   useEffect(() => {
-    if (!searchedCity || !ready || !globeRef.current) return;
+    if (!searchedCity || !globeRef.current) return;
     globeRef.current.pointOfView({ lat: searchedCity.lat, lng: searchedCity.lng, altitude: 1.4 }, 1200);
     const controls = globeRef.current.controls();
     controls.autoRotate = false;
     setSelected({ kind: 'searched', lat: searchedCity.lat, lng: searchedCity.lng, city: searchedCity });
-  }, [searchedCity, ready]);
+  }, [searchedCity]);
 
   const handleRecenter = useCallback(() => {
     if (!globeRef.current) return;
@@ -176,7 +179,10 @@ export const RiskGlobe = ({ searchedCity }: RiskGlobeProps) => {
           pointAltitude={(p: any) => ((p as GlobePoint).kind === 'searched' ? 0.03 : 0.02)}
           pointRadius={(p: any) => {
             const point = p as GlobePoint;
-            if (point.kind === 'district') return 0.35 + point.district.rainfall / 150;
+            // Jakarta's districts sit only ~0.07° apart at the closest pair,
+            // so these stay well under that even at the highest rainfall
+            // value to avoid the markers visually merging into each other.
+            if (point.kind === 'district') return 0.018 + point.district.rainfall / 6800;
             if (point.kind === 'searched') return 0.55;
             return 0.3;
           }}
