@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import Globe, { GlobeMethods } from 'react-globe.gl';
+import { toast } from 'sonner';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { RiskBadge } from '@/components/RiskBadge';
@@ -34,6 +35,12 @@ const hexToRgba = (hex: string, alpha: number) => {
 
 const JAKARTA_VIEW = { lat: -6.2, lng: 106.85, altitude: 1.7 };
 
+// Below this altitude, the globe's cylindrical point markers start looking
+// distorted at oblique viewing angles (a known three-globe limitation for
+// close-together points). Past this point, a flat 2D map is simply the
+// better tool, so we hand off to it automatically.
+const DEEP_ZOOM_ALTITUDE_THRESHOLD = 0.45;
+
 type GlobePoint =
   | { kind: 'district'; lat: number; lng: number; district: DistrictData }
   | { kind: 'disaster'; lat: number; lng: number; event: EonetEvent }
@@ -41,15 +48,17 @@ type GlobePoint =
 
 interface RiskGlobeProps {
   searchedCity?: CitySearchResult | null;
+  onDeepZoom?: (lat: number, lng: number) => void;
 }
 
-export const RiskGlobe = ({ searchedCity }: RiskGlobeProps) => {
+export const RiskGlobe = ({ searchedCity, onDeepZoom }: RiskGlobeProps) => {
   const globeRef = useRef<GlobeMethods | undefined>(undefined);
   const containerRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
   const [dimensions, setDimensions] = useState({ width: 300, height: 460 });
   const [ready, setReady] = useState(false);
   const [selected, setSelected] = useState<GlobePoint | null>(null);
+  const hasTriggeredDeepZoom = useRef(false);
 
   const { data: disasterEvents = [], isError: eventsErrored } = useQuery({
     queryKey: ['eonet-flood-storm-events'],
@@ -147,6 +156,18 @@ export const RiskGlobe = ({ searchedCity }: RiskGlobeProps) => {
     controls.autoRotateSpeed = 0.6;
   }, []);
 
+  const handleZoom = useCallback(
+    (pov: { lat: number; lng: number; altitude: number }) => {
+      if (!onDeepZoom || hasTriggeredDeepZoom.current) return;
+      if (pov.altitude < DEEP_ZOOM_ALTITUDE_THRESHOLD) {
+        hasTriggeredDeepZoom.current = true;
+        toast('Zoomed in close — switching to map view for a clearer look', { duration: 2500 });
+        onDeepZoom(pov.lat, pov.lng);
+      }
+    },
+    [onDeepZoom]
+  );
+
   return (
     <Card className="overflow-hidden">
       <div ref={containerRef} className="relative w-full bg-[#0a1128]" style={{ height: dimensions.height }}>
@@ -167,6 +188,7 @@ export const RiskGlobe = ({ searchedCity }: RiskGlobeProps) => {
           atmosphereColor="#7dd3fc"
           atmosphereAltitude={0.28}
           onGlobeReady={() => setReady(true)}
+          onZoom={handleZoom}
           pointsData={allPoints}
           pointLat="lat"
           pointLng="lng"

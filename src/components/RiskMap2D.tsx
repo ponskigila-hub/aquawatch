@@ -42,9 +42,10 @@ const popupStyles = `
 
 interface RiskMap2DProps {
   searchedCity?: CitySearchResult | null;
+  initialCenter?: { lat: number; lng: number } | null;
 }
 
-export const RiskMap2D = ({ searchedCity }: RiskMap2DProps) => {
+export const RiskMap2D = ({ searchedCity, initialCenter }: RiskMap2DProps) => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<L.Map | null>(null);
   const searchedMarkerRef = useRef<L.CircleMarker | null>(null);
@@ -76,7 +77,14 @@ export const RiskMap2D = ({ searchedCity }: RiskMap2DProps) => {
       document.head.appendChild(style);
     }
 
-    map.current = L.map(mapContainer.current).setView([-6.2088, 106.8456], 11);
+    // If we're arriving from a "deep zoom" handoff on the globe, open
+    // already centered and zoomed on that spot instead of the default
+    // Jakarta-wide view.
+    const startView: [number, number] = initialCenter
+      ? [initialCenter.lat, initialCenter.lng]
+      : [-6.2088, 106.8456];
+    const startZoom = initialCenter ? 13 : 11;
+    map.current = L.map(mapContainer.current).setView(startView, startZoom);
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '© OpenStreetMap contributors',

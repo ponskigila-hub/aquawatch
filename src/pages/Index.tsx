@@ -26,6 +26,12 @@ const MapFallback = () => (
 const Index = () => {
   const [viewMode, setViewMode] = useState<'globe' | 'map'>('globe');
   const [searchedCity, setSearchedCity] = useState<CitySearchResult | null>(null);
+  const [mapCenter, setMapCenter] = useState<{ lat: number; lng: number } | null>(null);
+
+  const handleDeepZoom = (lat: number, lng: number) => {
+    setMapCenter({ lat, lng });
+    setViewMode('map');
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -87,7 +93,10 @@ const Index = () => {
                 size="sm"
                 variant={viewMode === 'globe' ? 'default' : 'ghost'}
                 className="h-7 px-2.5 gap-1.5 text-xs"
-                onClick={() => setViewMode('globe')}
+                onClick={() => {
+                  setViewMode('globe');
+                  setMapCenter(null);
+                }}
               >
                 <GlobeIcon className="w-3.5 h-3.5" />
                 Globe
@@ -96,7 +105,10 @@ const Index = () => {
                 size="sm"
                 variant={viewMode === 'map' ? 'default' : 'ghost'}
                 className="h-7 px-2.5 gap-1.5 text-xs"
-                onClick={() => setViewMode('map')}
+                onClick={() => {
+                  setViewMode('map');
+                  setMapCenter(null);
+                }}
               >
                 <MapIcon className="w-3.5 h-3.5" />
                 Map
@@ -110,9 +122,9 @@ const Index = () => {
 
           <Suspense fallback={<MapFallback />}>
             {viewMode === 'globe' ? (
-              <RiskGlobe searchedCity={searchedCity} />
+              <RiskGlobe searchedCity={searchedCity} onDeepZoom={handleDeepZoom} />
             ) : (
-              <RiskMap2D searchedCity={searchedCity} />
+              <RiskMap2D searchedCity={searchedCity} initialCenter={mapCenter} />
             )}
           </Suspense>
         </section>
