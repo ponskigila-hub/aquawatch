@@ -98,3 +98,53 @@ Both would replace the fetch calls in `src/lib/openMeteo.ts`.
 ## Deployment
 
 This is a static Vite app — `npm run build` outputs plain HTML/JS/CSS to `dist/`, deployable to Vercel, Netlify, Cloudflare Pages, GitHub Pages, or any static host.
+
+
+## AI forecast prototype (FastAPI + PyTorch)
+
+This repository is a **Vite + React 18 + TypeScript** client (not Next.js). The dashboard-level view state lives in `src/pages/Index.tsx`; `RiskGlobe` and `RiskMap2D` own their local visualization state. TanStack Query caches the existing external data: NASA EONET flood/storm events in `src/lib/eonet.ts` and Open-Meteo geocoding/current weather in `src/lib/openMeteo.ts`. EONET markers and current district/weather values are rendered as globe/map markers; Jakarta district values and charts are currently sample/mock data (`src/data/mockData.ts`). The globe uses `react-globe.gl`/Three.js; the alternative map uses Leaflet.
+
+A new `backend/` service provides `POST /api/forecast`. The globe's **AI forecast · 24h** control requests a small bbox grid and renders the response's GeoJSON point features as a new WebGL marker layer. In development, Vite proxies `/api` to FastAPI on port `8000`; CORS is also configured for the local Vite origins.
+
+> **Important model caveat:** this is an inference and rendering scaffold, not a scientifically validated weather forecast. ResNet18 ImageNet weights initialize the visual encoder when available, but the precipitation/anomaly heatmap head is not trained on weather observations. With no fine-tuned checkpoint, outputs are illustrative normalized values only—not mm/hr, warnings, or decision support. If no input raster is submitted, the API creates a synthetic sample field. See `backend/README.md` for the intended training/checkpoint path.
+
+### Run both services in VS Code
+
+Open the extracted project folder in VS Code and use two integrated terminals:
+
+**Terminal 1 — FastAPI/PyTorch** (first-time setup):
+
+```bash
+cd backend
+python -m venv .venv
+source .venv/bin/activate                 # Windows PowerShell: .venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+cp .env.example .env                      # optional
+uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+```
+
+**Terminal 2 — Vite frontend:**
+
+```bash
+npm install
+npm run dev
+```
+
+Open the Vite URL (`http://localhost:8080` in this project). FastAPI docs are at `http://127.0.0.1:8000/docs`; `GET /health` is a quick availability check. The first model initialization may download torchvision ResNet18 pretrained weights; set `AQUAWATCH_DOWNLOAD_PRETRAINED=false` in `backend/.env` for offline demo mode. To call a separately hosted backend, set `VITE_API_URL` for the frontend build/dev environment and configure `AQUAWATCH_CORS_ORIGINS` on the backend.
+
+### Forecast API contract
+
+Example request:
+
+```json
+{
+  "bbox": { "west": 105.8, "south": -7.2, "east": 107.8, "north": -5.2 },
+  "grid_width": 16,
+  "grid_height": 10,
+  "horizon_hours": 24,
+  "variable": "precipitation"
+}
+```
+
+Optional `spatial_data` is a numeric matrix with exactly `grid_height` rows and `grid_width` columns (ordered north-to-south). The response is a GeoJSON `FeatureCollection`; each `Point` has `[longitude, latitude]` coordinates and prediction metadata. The additional `prediction_matrix` is row-major (north to south). Inputs are bounded and validated by Pydantic; output values are normalized `0..1`. Lead time and target variable are decoder inputs, but the default model is untrained and its output is only illustrative. See `backend/README.md` for curl and checkpoint configuration details.

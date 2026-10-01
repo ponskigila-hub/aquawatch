@@ -9,6 +9,7 @@ import { RiskBadge } from '@/components/RiskBadge';
 import { jakartaDistricts } from '@/data/mockData';
 import { fetchFloodStormEvents, EonetEvent } from '@/lib/eonet';
 import { fetchCityWeather, CitySearchResult } from '@/lib/openMeteo';
+import { fetchForecast, ForecastFeature } from '@/lib/forecast';
 import { DistrictData } from '@/types/flood';
 import { formatDistanceToNow } from 'date-fns';
 import { X, Droplets, Waves, Loader2, RotateCcw, Radio, ExternalLink, Thermometer } from 'lucide-react';
@@ -44,7 +45,8 @@ const DEEP_ZOOM_ALTITUDE_THRESHOLD = 0.45;
 type GlobePoint =
   | { kind: 'district'; lat: number; lng: number; district: DistrictData }
   | { kind: 'disaster'; lat: number; lng: number; event: EonetEvent }
-  | { kind: 'searched'; lat: number; lng: number; city: CitySearchResult };
+  | { kind: 'searched'; lat: number; lng: number; city: CitySearchResult }
+  | { kind: 'forecast'; lat: number; lng: number; prediction: number; horizonHours: number };
 
 interface RiskGlobeProps {
   searchedCity?: CitySearchResult | null;
@@ -58,6 +60,8 @@ export const RiskGlobe = ({ searchedCity, onDeepZoom }: RiskGlobeProps) => {
   const [dimensions, setDimensions] = useState({ width: 300, height: 460 });
   const [ready, setReady] = useState(false);
   const [selected, setSelected] = useState<GlobePoint | null>(null);
+  const [forecastPoints, setForecastPoints] = useState<GlobePoint[]>([]);
+  const [forecastLoading, setForecastLoading] = useState(false);
   const hasTriggeredDeepZoom = useRef(false);
 
   const { data: disasterEvents = [], isError: eventsErrored } = useQuery({
@@ -93,10 +97,47 @@ export const RiskGlobe = ({ searchedCity, onDeepZoom }: RiskGlobeProps) => {
     ? { kind: 'searched', lat: searchedCity.lat, lng: searchedCity.lng, city: searchedCity }
     : null;
 
+  const handleForecast = useCallback(async () => {
+    if (forecastPoints.length > 0) {
+      setForecastPoints([]);
+      return;
+    }
+    const center = searchedCity ?? { lat: -6.2088, lng: 106.8456 };
+    const halfSpan = 1.5;
+    setForecastLoading(true);
+    try {
+      const result = await fetchForecast({
+        bbox: {
+          west: Math.max(-180, center.lng - halfSpan),
+          south: Math.max(-90, center.lat - halfSpan),
+          east: Math.min(180, center.lng + halfSpan),
+          north: Math.min(90, center.lat + halfSpan),
+        },
+        grid_width: 16,
+        grid_height: 10,
+        horizon_hours: 24,
+        variable: 'precipitation',
+      });
+      const points: GlobePoint[] = result.features.map((feature: ForecastFeature) => ({
+        kind: 'forecast',
+        lng: feature.geometry.coordinates[0],
+        lat: feature.geometry.coordinates[1],
+        prediction: feature.properties.prediction,
+        horizonHours: feature.properties.horizon_hours,
+      }));
+      setForecastPoints(points);
+      toast.warning('Illustrative model output only — not a validated weather forecast.', { duration: 5000 });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not load the forecast layer');
+    } finally {
+      setForecastLoading(false);
+    }
+  }, [forecastPoints.length, searchedCity]);
+
   const allPoints = useMemo(
-    () => [...districtPoints, ...disasterPoints, ...(searchedPoint ? [searchedPoint] : [])],
+    () => [...districtPoints, ...disasterPoints, ...(searchedPoint ? [searchedPoint] : []), ...forecastPoints],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [disasterEvents, searchedCity]
+    [disasterEvents, searchedCity, forecastPoints]
   );
 
   // Fallback: three-globe's texture loader has no error handler, so if the
@@ -179,7 +220,7 @@ export const RiskGlobe = ({ searchedCity, onDeepZoom }: RiskGlobeProps) => {
         )}
 
         <Globe
-          ref={globeRef as any}
+          ref={globeRef}
           width={dimensions.width}
           height={dimensions.height}
           backgroundColor="#0a1128"
@@ -192,23 +233,30 @@ export const RiskGlobe = ({ searchedCity, onDeepZoom }: RiskGlobeProps) => {
           pointsData={allPoints}
           pointLat="lat"
           pointLng="lng"
-          pointColor={(p: any) => {
+          pointColor={(p: object) => {
             const point = p as GlobePoint;
             if (point.kind === 'district') return riskColors[point.district.riskLevel];
             if (point.kind === 'disaster') return disasterColor(point.event.category);
+            if (point.kind === 'forecast') {
+              if (point.prediction < 0.25) return '#38bdf8';
+              if (point.prediction < 0.5) return '#22d3ee';
+              if (point.prediction < 0.75) return '#facc15';
+              return '#fb7185';
+            }
             return '#eab308'; // searched city marker
           }}
-          pointAltitude={(p: any) => ((p as GlobePoint).kind === 'searched' ? 0.03 : 0.02)}
-          pointRadius={(p: any) => {
+          pointAltitude={(p: object) => ((p as GlobePoint).kind === 'searched' ? 0.03 : 0.02)}
+          pointRadius={(p: object) => {
             const point = p as GlobePoint;
             // Jakarta's districts sit only ~0.07° apart at the closest pair,
             // so these stay well under that even at the highest rainfall
             // value to avoid the markers visually merging into each other.
             if (point.kind === 'district') return 0.018 + point.district.rainfall / 6800;
+            if (point.kind === 'forecast') return 0.055;
             if (point.kind === 'searched') return 0.55;
             return 0.3;
           }}
-          pointLabel={(p: any) => {
+          pointLabel={(p: object) => {
             const point = p as GlobePoint;
             if (point.kind === 'district') {
               const d = point.district;
@@ -221,18 +269,30 @@ export const RiskGlobe = ({ searchedCity, onDeepZoom }: RiskGlobeProps) => {
                 <b>${point.city.name}</b><br/>${point.city.country}
               </div>`;
             }
+            if (point.kind === 'forecast') {
+              return `<div style="font-family:inherit;background:rgba(15,23,42,0.9);color:white;padding:6px 10px;border-radius:6px;font-size:12px;">
+                <b>AI precipitation demo</b><br/>Normalized value: ${point.prediction.toFixed(2)} · ${point.horizonHours}h
+              </div>`;
+            }
             const e = point.event;
             return `<div style="font-family:inherit;background:rgba(15,23,42,0.9);color:white;padding:6px 10px;border-radius:6px;font-size:12px;max-width:220px;">
               <b>${e.title}</b><br/>${e.category} · NASA EONET
             </div>`;
           }}
-          onPointClick={(p: any) => setSelected(p as GlobePoint)}
+          onPointClick={(p: object) => {
+            const point = p as GlobePoint;
+            if (point.kind !== 'forecast') setSelected(point);
+          }}
           ringsData={[...disasterPoints, ...(searchedPoint ? [searchedPoint] : [])]}
           ringLat="lat"
           ringLng="lng"
-          ringColor={(p: any) => {
+          ringColor={(p: object) => {
             const point = p as GlobePoint;
-            const color = point.kind === 'searched' ? '#eab308' : disasterColor((point as any).event.category);
+            const color = point.kind === 'searched'
+              ? '#eab308'
+              : point.kind === 'disaster'
+                ? disasterColor(point.event.category)
+                : '#ffffff';
             return (t: number) => hexToRgba(color, 1 - t);
           }}
           ringMaxRadius={2.2}
@@ -251,9 +311,28 @@ export const RiskGlobe = ({ searchedCity, onDeepZoom }: RiskGlobeProps) => {
           <RotateCcw className="w-4 h-4" />
         </Button>
 
-        <div className="absolute top-2 left-2 sm:top-3 sm:left-3 z-10 bg-black/50 backdrop-blur-sm border border-white/10 rounded-lg px-2.5 py-1 text-[11px] sm:text-xs text-white/80">
-          Drag to rotate · Scroll to zoom · Click a point for details
+        <div className="absolute top-2 left-2 sm:top-3 sm:left-3 z-10 flex flex-col sm:flex-row items-start sm:items-center gap-1.5">
+          <div className="bg-black/50 backdrop-blur-sm border border-white/10 rounded-lg px-2.5 py-1 text-[11px] sm:text-xs text-white/80">
+            Drag to rotate · Scroll to zoom · Click a point for details
+          </div>
+          <Button
+            size="sm"
+            variant="secondary"
+            className="h-7 px-2.5 text-[11px] shadow-md"
+            onClick={() => void handleForecast()}
+            disabled={forecastLoading}
+            aria-label={forecastPoints.length > 0 ? 'Hide forecast layer' : 'Show illustrative 24-hour forecast layer'}
+          >
+            {forecastLoading ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <Waves className="w-3 h-3 mr-1" />}
+            {forecastLoading ? 'Forecasting…' : forecastPoints.length > 0 ? 'Hide forecast' : 'AI forecast · 24h'}
+          </Button>
         </div>
+
+        {forecastPoints.length > 0 && (
+          <div className="absolute bottom-2 left-2 sm:bottom-3 sm:left-3 z-10 rounded-lg border border-amber-300/30 bg-black/65 px-2.5 py-1 text-[10px] sm:text-xs text-amber-100">
+            Illustrative model output · not a validated forecast
+          </div>
+        )}
 
         {!eventsErrored && disasterEvents.length > 0 && (
           <div className="absolute bottom-2 right-2 sm:bottom-3 sm:right-3 z-10 flex items-center gap-1.5 bg-black/50 backdrop-blur-sm border border-white/10 rounded-full px-2.5 py-1 text-[11px] sm:text-xs text-white/80">

@@ -1,0 +1,1 @@
+"""AquaWatch FastAPI backend package."""
