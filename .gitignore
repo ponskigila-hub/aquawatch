@@ -12,6 +12,7 @@ dist
 dist-ssr
 *.local
 backend/.venv/
+backend/.venv-aqua/
 backend/.env
 backend/weights/
 *.pt
