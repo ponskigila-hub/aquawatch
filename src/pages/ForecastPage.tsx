@@ -8,8 +8,8 @@ import { ThemeToggle } from '@/components/ThemeToggle';
 import { WeatherSummary } from '@/components/WeatherSummary';
 import { useRegionalOutlook } from '@/hooks/useRegionalOutlook';
 import { getRegionLabel } from '@/lib/globalWeather';
-import { fetchCityWeather, weatherDescription, type CitySearchResult } from '@/lib/openMeteo';
-import { ArrowLeft, Cloud, CloudDrizzle, CloudFog, CloudLightning, CloudRain, CloudSnow, CloudSun, Droplets, Loader2, RefreshCw, Sun, Waves } from 'lucide-react';
+import { fetchCityWeather, weatherDescription, weatherVisualState, type CitySearchResult } from '@/lib/openMeteo';
+import { ArrowLeft, ChevronDown, Cloud, CloudDrizzle, CloudFog, CloudLightning, CloudRain, CloudSnow, CloudSun, Droplets, Loader2, RefreshCw, Sun, Waves } from 'lucide-react';
 
 const JAKARTA = { lat: -6.2088, lng: 106.8456 };
 
@@ -41,9 +41,14 @@ const riskStyle: Record<string, string> = {
   Unavailable: 'border-border bg-muted text-muted-foreground',
 };
 
+const formatHour = (localTime: string) => new Intl.DateTimeFormat(undefined, {
+  hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'UTC',
+}).format(new Date(`${localTime}:00Z`));
+
 const ForecastPage = () => {
   const [searchParams] = useSearchParams();
   const [city, setCity] = useState<CitySearchResult | null>(() => getInitialCity(searchParams));
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const regionLabel = getRegionLabel(city);
   const lat = city?.lat ?? JAKARTA.lat;
   const lng = city?.lng ?? JAKARTA.lng;
@@ -73,11 +78,11 @@ const ForecastPage = () => {
       <main className="container mx-auto space-y-5 px-4 py-5 sm:space-y-7 sm:py-8">
         <section className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div><p className="mb-1 text-xs font-semibold uppercase tracking-wider text-primary">7-day outlook</p><h2 className="text-2xl font-bold tracking-tight sm:text-3xl">{regionLabel}</h2><p className="mt-1 text-sm text-muted-foreground">Today’s weather and the week ahead, in one place.</p></div>
-          <div className="flex w-full gap-2 sm:w-auto"><CitySearch onSelect={setCity} onReset={() => setCity(null)} placeholder="Search for a city…" /><Button variant="outline" size="icon" aria-label="Refresh forecast" onClick={() => { void outlookQuery.refetch(); void currentQuery.refetch(); }} disabled={outlookQuery.isFetching || currentQuery.isFetching}><RefreshCw className={`h-4 w-4 ${outlookQuery.isFetching || currentQuery.isFetching ? 'animate-spin' : ''}`} /></Button></div>
+          <div className="flex w-full gap-2 sm:w-auto"><CitySearch onSelect={(location) => { setCity(location); setSelectedDate(null); }} onReset={() => { setCity(null); setSelectedDate(null); }} placeholder="Search for a city…" /><Button variant="outline" size="icon" aria-label="Refresh forecast" onClick={() => { void outlookQuery.refetch(); void currentQuery.refetch(); }} disabled={outlookQuery.isFetching || currentQuery.isFetching}><RefreshCw className={`h-4 w-4 ${outlookQuery.isFetching || currentQuery.isFetching ? 'animate-spin' : ''}`} /></Button></div>
         </section>
 
         <Card className="overflow-hidden border-sky-500/15 bg-gradient-to-br from-sky-500/[0.07] via-card to-indigo-500/[0.06]">
-          <CardHeader className="pb-2"><CardTitle className="text-base">Today in {city?.name ?? 'Jakarta'}</CardTitle><CardDescription>{city?.admin1 ? `${city.admin1}, ` : ''}{city?.country ?? 'Indonesia'}</CardDescription></CardHeader>
+          <CardHeader className="pb-2"><CardTitle className="text-base">Today in {city?.name ?? 'Jakarta'}</CardTitle><CardDescription>{regionLabel}</CardDescription></CardHeader>
           <CardContent>
           {currentQuery.isLoading ? <div className="flex min-h-36 items-center justify-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Loading today’s weather…</div>
               : current ? <WeatherSummary weather={current} compact />
@@ -98,19 +103,40 @@ const ForecastPage = () => {
         </section>
 
         <section>
-          <div className="mb-3"><h3 className="text-lg font-semibold">Next 7 days</h3><p className="text-sm text-muted-foreground">Daily temperature in °C, rain chance, and nearby river flow.</p></div>
+          <div className="mb-3"><h3 className="text-lg font-semibold">Next 7 days</h3><p className="text-sm text-muted-foreground">Choose a day to see its full 24-hour forecast.</p></div>
           {outlookQuery.isLoading ? <div className="flex min-h-32 items-center justify-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Loading the week ahead…</div>
             : outlookQuery.data?.days.length ? <div className="space-y-2">{outlookQuery.data.days.map((day, index) => {
               const DayIcon = iconForWeather(day.weatherCode);
+              const visualState = weatherVisualState(day.weatherCode);
               const dayLabel = index === 0 ? 'Today' : new Intl.DateTimeFormat(undefined, { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' }).format(new Date(`${day.date}T12:00:00Z`));
-              return <Card key={day.date}><CardContent className="grid grid-cols-2 items-center gap-x-3 gap-y-3 p-3 sm:grid-cols-[minmax(130px,1.3fr)_1fr_1fr_1fr_1fr_auto] sm:gap-4 sm:p-4">
-                <div className="flex min-w-0 items-center gap-2"><DayIcon className="h-6 w-6 shrink-0 text-sky-500" /><div className="min-w-0"><p className="truncate text-sm font-semibold">{dayLabel}</p><p className="truncate text-xs text-muted-foreground">{weatherDescription(day.weatherCode)}</p></div></div>
-                <div><p className="text-[11px] text-muted-foreground">High / low</p><p className="text-sm font-semibold">{day.temperatureHighC === null ? '—' : `${Math.round(day.temperatureHighC)}°`} / {day.temperatureLowC === null ? '—' : `${Math.round(day.temperatureLowC)}°`}</p></div>
-                <div><p className="text-[11px] text-muted-foreground">Area rain</p><p className="flex items-center gap-1 text-sm font-semibold"><Droplets className="h-3.5 w-3.5 text-sky-500" />{day.rainfallMm === null ? '—' : `${day.rainfallMm.toFixed(1)} mm`}</p></div>
-                <div><p className="text-[11px] text-muted-foreground">Rain chance</p><p className="text-sm font-semibold">{day.rainChancePercent === null ? '—' : `${Math.round(day.rainChancePercent)}%`}</p></div>
-                <div><p className="text-[11px] text-muted-foreground">River flow</p><p className="flex items-center gap-1 text-sm font-semibold"><Waves className="h-3.5 w-3.5 text-primary" />{day.riverDischargeM3s === null ? '—' : `${day.riverDischargeM3s.toFixed(1)} m³/s`}</p></div>
-                <span className={`col-span-2 justify-self-start rounded-full border px-2.5 py-1 text-xs font-semibold sm:col-span-1 sm:justify-self-end ${riskStyle[day.floodRisk]}`}>Flood risk: {day.floodRisk}</span>
-              </CardContent></Card>;
+              const expanded = selectedDate === day.date;
+              const hourlyRows = current?.hourlyForecastByDate[day.date] ?? [];
+              return <Card key={day.date} className={`overflow-hidden transition-colors ${expanded ? 'border-primary/45 shadow-md shadow-primary/5' : 'hover:border-primary/30'}`}>
+                <button type="button" className="w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary" aria-expanded={expanded} aria-controls={`hourly-details-${day.date}`} onClick={() => setSelectedDate(expanded ? null : day.date)}>
+                  <CardContent className="grid grid-cols-2 items-center gap-x-3 gap-y-3 p-3 sm:grid-cols-[minmax(130px,1.3fr)_1fr_1fr_1fr_1fr_auto] sm:gap-4 sm:p-4">
+                    <div className="flex min-w-0 items-center gap-2"><DayIcon className={`weather-symbol-${visualState} h-6 w-6 shrink-0 text-sky-600 dark:text-sky-300`} /><div className="min-w-0"><p className="truncate text-sm font-semibold">{dayLabel}</p><p className="truncate text-xs text-muted-foreground">{weatherDescription(day.weatherCode)}</p></div></div>
+                    <div><p className="text-[11px] text-muted-foreground">High / low</p><p className="text-sm font-semibold">{day.temperatureHighC === null ? '—' : `${Math.round(day.temperatureHighC)}°`} / {day.temperatureLowC === null ? '—' : `${Math.round(day.temperatureLowC)}°`}</p></div>
+                    <div><p className="text-[11px] text-muted-foreground">Area rain</p><p className="flex items-center gap-1 text-sm font-semibold"><Droplets className="h-3.5 w-3.5 text-sky-600 dark:text-sky-300" />{day.rainfallMm === null ? '—' : `${day.rainfallMm.toFixed(1)} mm`}</p></div>
+                    <div><p className="text-[11px] text-muted-foreground">Rain chance</p><p className="text-sm font-semibold">{day.rainChancePercent === null ? '—' : `${Math.round(day.rainChancePercent)}%`}</p></div>
+                    <div><p className="text-[11px] text-muted-foreground">River flow</p><p className="flex items-center gap-1 text-sm font-semibold"><Waves className="h-3.5 w-3.5 text-primary" />{day.riverDischargeM3s === null ? '—' : `${day.riverDischargeM3s.toFixed(1)} m³/s`}</p></div>
+                    <div className="col-span-2 flex items-center justify-between gap-2 sm:col-span-1 sm:justify-self-end"><span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${riskStyle[day.floodRisk]}`}>Flood risk: {day.floodRisk}</span><span className="flex items-center gap-1 text-[11px] font-medium text-primary sm:hidden">{expanded ? 'Hide' : '24 hours'}<ChevronDown className={`h-3.5 w-3.5 transition-transform ${expanded ? 'rotate-180' : ''}`} /></span><ChevronDown className={`hidden h-4 w-4 text-muted-foreground transition-transform sm:block ${expanded ? 'rotate-180' : ''}`} /></div>
+                  </CardContent>
+                </button>
+                {expanded && <div id={`hourly-details-${day.date}`} role="region" aria-label={`${dayLabel} hourly forecast`} className="border-t border-primary/10 bg-muted/20 p-3 sm:p-4">
+                  <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2"><div><h4 className="text-sm font-semibold">Hourly forecast · {dayLabel}</h4><p className="text-xs text-muted-foreground">All available hours in local time</p></div><span className="text-[11px] text-muted-foreground">{hourlyRows.length} hours</span></div>
+                  {currentQuery.isLoading ? <div className="flex items-center gap-2 py-5 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Loading hourly details…</div>
+                    : hourlyRows.length ? <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">{hourlyRows.map((hour) => {
+                      const HourIcon = iconForWeather(hour.weatherCode);
+                      const hourState = weatherVisualState(hour.weatherCode);
+                      return <div key={hour.time} className="weather-hour-detail rounded-xl p-3">
+                        <div className="flex items-center justify-between gap-1"><p className="text-xs font-semibold">{formatHour(hour.time)}</p><HourIcon className={`weather-symbol-${hourState} h-4 w-4 text-sky-600 dark:text-sky-300`} /></div>
+                        <p className="mt-1 text-xl font-semibold tracking-tight">{hour.temperatureC === null ? '—' : `${Math.round(hour.temperatureC)}°`}<span className="ml-0.5 text-xs font-normal text-muted-foreground">C</span></p>
+                        <p className="truncate text-[11px] text-muted-foreground">{weatherDescription(hour.weatherCode)}</p>
+                        <div className="mt-2 space-y-1 border-t border-primary/10 pt-2 text-[10px] text-muted-foreground"><p>Rain chance <strong className="text-foreground">{hour.rainChancePercent === null ? '—' : `${Math.round(hour.rainChancePercent)}%`}</strong></p><p>Wind <strong className="text-foreground">{hour.windKph === null ? '—' : `${Math.round(hour.windKph)} km/h`}</strong></p><p>Humidity <strong className="text-foreground">{hour.humidityPercent === null ? '—' : `${Math.round(hour.humidityPercent)}%`}</strong></p></div>
+                      </div>;
+                    })}</div> : <p className="py-4 text-sm text-muted-foreground">Hourly details are not available for this date. Refresh the forecast or choose another day.</p>}
+                </div>}
+              </Card>;
             })}</div> : <Card><CardContent className="p-4 text-sm text-muted-foreground">The seven-day outlook is unavailable for this location right now.</CardContent></Card>}
         </section>
 

@@ -16,7 +16,22 @@ export interface HourlyWeather {
   temperatureC: number | null;
   rainChancePercent: number | null;
   weatherCode: number | null;
+  windKph: number | null;
+  humidityPercent: number | null;
 }
+
+export type WeatherVisualState = 'sunny' | 'partly-cloudy' | 'cloudy' | 'foggy' | 'rainy' | 'snowy' | 'stormy' | 'unknown';
+
+export const weatherVisualState = (code: number | null | undefined): WeatherVisualState => {
+  if (code === 0) return 'sunny';
+  if (code === 1 || code === 2) return 'partly-cloudy';
+  if (code === 3) return 'cloudy';
+  if (code === 45 || code === 48) return 'foggy';
+  if ([51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82].includes(code ?? -1)) return 'rainy';
+  if ([71, 73, 75, 77, 85, 86].includes(code ?? -1)) return 'snowy';
+  if ([95, 96, 99].includes(code ?? -1)) return 'stormy';
+  return 'unknown';
+};
 
 export interface CityWeather {
   rainfallTodayMm: number | null;
@@ -30,6 +45,7 @@ export interface CityWeather {
   humidityPercent: number | null;
   weatherCode: number | null;
   hourlyForecast: HourlyWeather[];
+  hourlyForecastByDate: Record<string, HourlyWeather[]>;
   fetchedAt: string;
 }
 
@@ -76,9 +92,9 @@ export const fetchCityWeather = async (lat: number, lng: number): Promise<CityWe
     latitude: String(lat),
     longitude: String(lng),
     current: 'temperature_2m,apparent_temperature,relative_humidity_2m,precipitation,weather_code,wind_speed_10m',
-    hourly: 'temperature_2m,precipitation_probability,weather_code',
+    hourly: 'temperature_2m,precipitation_probability,weather_code,wind_speed_10m,relative_humidity_2m',
     daily: 'rain_sum,temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code',
-    forecast_days: '2',
+    forecast_days: '7',
     timezone: 'auto',
   });
   const res = await fetch(`${FORECAST_URL}?${params.toString()}`);
@@ -86,16 +102,22 @@ export const fetchCityWeather = async (lat: number, lng: number): Promise<CityWe
   const data = await res.json();
   const currentTime = String(data?.current?.time ?? '');
   const hourlyTimes: string[] = data?.hourly?.time ?? [];
-  const startHour = Math.max(0, hourlyTimes.findIndex((time) => time >= currentTime));
-  const hourlyForecast: HourlyWeather[] = hourlyTimes.slice(startHour, startHour + 6).map((time, index) => {
-    const sourceIndex = startHour + index;
-    return {
-      time,
-      temperatureC: numberOrNull(data?.hourly?.temperature_2m?.[sourceIndex]),
-      rainChancePercent: numberOrNull(data?.hourly?.precipitation_probability?.[sourceIndex]),
-      weatherCode: numberOrNull(data?.hourly?.weather_code?.[sourceIndex]),
-    };
-  });
+  const hourlyValues: HourlyWeather[] = hourlyTimes.map((time, index) => ({
+    time,
+    temperatureC: numberOrNull(data?.hourly?.temperature_2m?.[index]),
+    rainChancePercent: numberOrNull(data?.hourly?.precipitation_probability?.[index]),
+    weatherCode: numberOrNull(data?.hourly?.weather_code?.[index]),
+    windKph: numberOrNull(data?.hourly?.wind_speed_10m?.[index]),
+    humidityPercent: numberOrNull(data?.hourly?.relative_humidity_2m?.[index]),
+  }));
+  const hourlyForecastByDate = hourlyValues.reduce<Record<string, HourlyWeather[]>>((days, hour) => {
+    const date = hour.time.slice(0, 10);
+    (days[date] ??= []).push(hour);
+    return days;
+  }, {});
+  const futureHourIndex = hourlyTimes.findIndex((time) => time >= currentTime);
+  const startHour = futureHourIndex >= 0 ? futureHourIndex : Math.max(0, hourlyTimes.length - 1);
+  const hourlyForecast = hourlyValues.slice(startHour, startHour + 12);
 
   return {
     rainfallTodayMm: numberOrNull(data?.daily?.rain_sum?.[0]),
@@ -109,6 +131,7 @@ export const fetchCityWeather = async (lat: number, lng: number): Promise<CityWe
     humidityPercent: numberOrNull(data?.current?.relative_humidity_2m),
     weatherCode: numberOrNull(data?.current?.weather_code),
     hourlyForecast,
+    hourlyForecastByDate,
     fetchedAt: currentTime || new Date().toISOString(),
   };
 };

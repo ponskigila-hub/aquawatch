@@ -7,7 +7,8 @@ A global rainfall and river-flow dashboard built with React, TypeScript, a 3D gl
 - Explore weather in **more than 100 cities across many countries** on either map. Select a marker to see current conditions, temperature, today’s high and low, rain chance, wind, and humidity.
 - Search for a city to update the dashboard, nearby-area list, alerts, and forecast. Clear the search to return to Jakarta.
 - Check today’s area-average rainfall and nearby river flow, plus a seven-day view of rain, temperature, rain chance, and river-flow estimates.
-- Open **Forecast** for a city-focused weather summary and seven-day outlook, including upcoming hours.
+- See the next **12 hours** in the local-weather timeline. On **Forecast**, select any day to open its available hourly details—temperature, conditions, rain chance, wind, and humidity.
+- Switch between a light sky-gradient theme and a deep-blue night theme; weather icons and subtle rain, sun, cloud, or snow motion follow the forecast.
 - See flood and storm reports from NASA on the maps. These reports are separate from weather estimates.
 
 ## Forecast and flood-risk wording

@@ -76,10 +76,16 @@ const Index = () => {
       </header>
 
       <main className="container mx-auto px-4 py-5 sm:py-6 lg:py-8 space-y-6 sm:space-y-8 lg:space-y-10">
-        <div className="flex flex-col gap-1"><p className="text-xs font-semibold uppercase tracking-[0.18em] text-sky-300">Local weather</p><h2 className="text-lg font-semibold">{regionLabel}</h2></div>
+        <div className="flex flex-col gap-1"><p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">Local weather</p><h2 className="text-lg font-semibold">{regionLabel}</h2></div>
         <CurrentWeatherCard city={searchedCity} regionLabel={regionLabel} onSelectCity={(location) => handleLocationSelect(location, 'city')} />
-        <StatsOverview data={regionWeather} isLoading={regionLoading} regionLabel={regionLabel} />
-        <InsightsPanel data={regionWeather} isLoading={regionLoading} regionLabel={regionLabel} />
+        <section aria-labelledby="overview-heading">
+          <div className="mb-3"><h2 id="overview-heading" className="text-lg font-semibold sm:text-xl">Rain &amp; flood overview</h2><p className="mt-0.5 text-xs text-muted-foreground sm:text-sm">The key conditions for {regionLabel} at a glance.</p></div>
+          <StatsOverview data={regionWeather} isLoading={regionLoading} regionLabel={regionLabel} />
+        </section>
+        <section aria-labelledby="watch-heading">
+          <div className="mb-3"><h2 id="watch-heading" className="text-lg font-semibold sm:text-xl">What to watch</h2></div>
+          <InsightsPanel data={regionWeather} isLoading={regionLoading} regionLabel={regionLabel} />
+        </section>
 
         <section>
           <div className="flex flex-wrap items-end justify-between gap-3 mb-3 sm:mb-4">

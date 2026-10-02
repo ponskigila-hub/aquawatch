@@ -342,12 +342,12 @@ export async function fetchRegionalOutlook(locations: WeatherLocation[]): Promis
     fetchMultiPointJson(FORECAST_URL, locations, {
       daily: 'rain_sum,temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code',
       forecast_days: '7',
-      timezone: 'GMT',
+      timezone: 'auto',
     }),
     fetchMultiPointJson(FLOOD_URL, locations, {
       daily: 'river_discharge',
       forecast_days: '7',
-      timezone: 'GMT',
+      timezone: 'auto',
     }).catch(() => [] as WeatherApiResult[]),
   ]);
 

@@ -213,7 +213,7 @@ export const GlobeSearch = ({ selectedCity, selectedIsCountry = false, onSelect,
   return (
     <div ref={containerRef} className="relative w-full max-w-[min(24rem,calc(100vw-5.5rem))]">
       <div className="relative">
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-sky-300" />
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-primary" />
         <input
           type="search"
           value={query}
@@ -221,19 +221,19 @@ export const GlobeSearch = ({ selectedCity, selectedIsCountry = false, onSelect,
           onFocus={() => { if (query.length >= 2) setOpen(true); }}
           onKeyDown={handleKeyDown}
           placeholder="Find a city or country…"
-          className="h-11 w-full rounded-xl border border-sky-300/30 bg-slate-950/85 pl-10 pr-10 text-sm text-white shadow-xl shadow-slate-950/30 outline-none backdrop-blur-xl placeholder:text-slate-400 transition focus:border-sky-300/80 focus:ring-2 focus:ring-sky-300/25"
+          className="h-11 w-full rounded-xl border border-border bg-card/95 pl-10 pr-10 text-sm text-foreground shadow-xl shadow-black/10 outline-none backdrop-blur-xl placeholder:text-muted-foreground transition focus:border-primary/60 focus:ring-2 focus:ring-primary/20"
           aria-label="Find a city or country on the globe"
           aria-expanded={open && query.length >= 2}
           aria-controls="globe-search-results"
           role="combobox"
           autoComplete="off"
         />
-        {loading && <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-sky-300" />}
-        {!loading && query && <button type="button" onClick={clear} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 transition hover:text-white" aria-label="Clear globe search"><X className="h-4 w-4" /></button>}
+        {loading && <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-primary" />}
+        {!loading && query && <button type="button" onClick={clear} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground transition hover:text-foreground" aria-label="Clear globe search"><X className="h-4 w-4" /></button>}
       </div>
-      {open && query.length >= 2 && <div id="globe-search-results" className="absolute z-40 mt-2 max-h-80 w-full overflow-y-auto rounded-xl border border-sky-300/25 bg-slate-950/95 p-1.5 text-white shadow-2xl shadow-slate-950/50 backdrop-blur-xl" role="listbox">
-        {targets.length === 0 && (loading || error) && <div className="flex items-center gap-2 px-3 py-3 text-sm text-slate-300">{loading ? <Loader2 className="h-4 w-4 animate-spin text-sky-300" /> : <MapPin className="h-4 w-4" />}{loading ? 'Searching places…' : 'No matching places. Try a city name.'}</div>}
-        {targets.length === 0 && !loading && !error && <p className="px-3 py-3 text-sm text-slate-300">No places found. Try another spelling.</p>}
+      {open && query.length >= 2 && <div id="globe-search-results" className="absolute z-40 mt-2 max-h-80 w-full overflow-y-auto rounded-xl border border-border bg-popover/95 p-1.5 text-popover-foreground shadow-2xl shadow-black/15 backdrop-blur-xl" role="listbox">
+        {targets.length === 0 && (loading || error) && <div className="flex items-center gap-2 px-3 py-3 text-sm text-muted-foreground">{loading ? <Loader2 className="h-4 w-4 animate-spin text-primary" /> : <MapPin className="h-4 w-4" />}{loading ? 'Searching places…' : 'No matching places. Try a city name.'}</div>}
+        {targets.length === 0 && !loading && !error && <p className="px-3 py-3 text-sm text-muted-foreground">No places found. Try another spelling.</p>}
         {targets.map((target, index) => (
           <button
             key={target.kind === 'country' ? `country-${target.location.country}` : `city-${target.location.id}-${target.location.lat}`}
@@ -242,15 +242,15 @@ export const GlobeSearch = ({ selectedCity, selectedIsCountry = false, onSelect,
             aria-selected={index === activeIndex}
             onMouseEnter={() => setActiveIndex(index)}
             onClick={() => chooseTarget(target)}
-            className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition ${index === activeIndex ? 'bg-sky-500/20' : 'hover:bg-white/5'}`}
+            className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition ${index === activeIndex ? 'bg-primary/10' : 'hover:bg-muted/70'}`}
           >
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-sky-300/20 bg-sky-500/10 text-sky-200">{target.kind === 'country' ? <Globe2 className="h-4 w-4" /> : <MapPin className="h-4 w-4" />}</span>
-            <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{target.location.name}</span><span className="block truncate text-xs text-slate-400">{target.kind === 'country' ? `Country · focus near ${target.focusCityName}` : [target.location.admin1, target.location.country].filter(Boolean).join(', ')}</span></span>
-            <span className="rounded-full border border-sky-300/20 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-sky-200">{target.kind}</span>
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-primary/20 bg-primary/10 text-primary">{target.kind === 'country' ? <Globe2 className="h-4 w-4" /> : <MapPin className="h-4 w-4" />}</span>
+            <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{target.location.name}</span><span className="block truncate text-xs text-muted-foreground">{target.kind === 'country' ? `Country · focus near ${target.focusCityName}` : [target.location.admin1, target.location.country].filter(Boolean).join(', ')}</span></span>
+            <span className="rounded-full border border-primary/20 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-primary">{target.kind}</span>
           </button>
         ))}
-        {error && targets.length > 0 && <p className="px-3 py-2 text-[11px] text-slate-400">Showing saved country locations; live city search is temporarily unavailable.</p>}
-        <p className="px-3 pb-1 pt-2 text-[10px] text-slate-500">Choose a result to move the globe to its weather markers.</p>
+        {error && targets.length > 0 && <p className="px-3 py-2 text-[11px] text-muted-foreground">Showing saved country locations; live city search is temporarily unavailable.</p>}
+        <p className="px-3 pb-1 pt-2 text-[10px] text-muted-foreground">Choose a result to move the globe to its weather markers.</p>
       </div>}
     </div>
   );
