@@ -7,11 +7,13 @@ import { RiskBadge } from '@/components/RiskBadge';
 import { useGlobalCityWeather } from '@/hooks/useGlobalCityWeather';
 import { fetchFloodStormEvents, type EonetEvent } from '@/lib/eonet';
 import { fetchCityWeather, weatherDescription, type CitySearchResult } from '@/lib/openMeteo';
+import { getRegionLabel } from '@/lib/globalWeather';
 import type { GlobalCityWeather, LiveAreaWeather, LiveRegionWeather } from '@/lib/globalWeather';
 import { useQuery } from '@tanstack/react-query';
 import { formatDistanceToNow } from 'date-fns';
 import { X, Loader2, RotateCcw, Radio, ExternalLink } from 'lucide-react';
 import { WeatherSummary } from '@/components/WeatherSummary';
+import { GlobeSearch, type GlobeSearchKind } from '@/components/GlobeSearch';
 
 const riskColors: Record<string, string> = {
   safe: '#22c55e',
@@ -38,12 +40,15 @@ const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (character) => (
 
 interface RiskGlobeProps {
   searchedCity?: CitySearchResult | null;
+  searchedIsCountry?: boolean;
   regionWeather?: LiveRegionWeather;
   regionLabel?: string;
+  onSelectLocation: (city: CitySearchResult, kind: GlobeSearchKind) => void;
+  onResetSearch: () => void;
   onDeepZoom?: (lat: number, lng: number) => void;
 }
 
-export const RiskGlobe = ({ searchedCity, regionWeather, regionLabel = 'Jakarta, Indonesia', onDeepZoom }: RiskGlobeProps) => {
+export const RiskGlobe = ({ searchedCity, searchedIsCountry = false, regionWeather, regionLabel = 'Jakarta, Indonesia', onSelectLocation, onResetSearch, onDeepZoom }: RiskGlobeProps) => {
   const globeRef = useRef<GlobeMethods | undefined>(undefined);
   const containerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 300, height: 460 });
@@ -117,21 +122,21 @@ export const RiskGlobe = ({ searchedCity, regionWeather, regionLabel = 'Jakarta,
 
   useEffect(() => {
     if (!searchedCity || !globeRef.current) return;
-    globeRef.current.pointOfView({ lat: searchedCity.lat, lng: searchedCity.lng, altitude: 1.4 }, 1200);
+    globeRef.current.pointOfView({ lat: searchedCity.lat, lng: searchedCity.lng, altitude: searchedIsCountry ? 0.98 : 0.58 }, 1450);
     globeRef.current.controls().autoRotate = false;
     setSelected({ kind: 'searched', lat: searchedCity.lat, lng: searchedCity.lng, city: searchedCity });
-  }, [searchedCity]);
+  }, [searchedCity, searchedIsCountry]);
 
   const handleRecenter = useCallback(() => {
     if (!globeRef.current) return;
     const center = searchedCity
-      ? { lat: searchedCity.lat, lng: searchedCity.lng, altitude: 1.4 }
+      ? { lat: searchedCity.lat, lng: searchedCity.lng, altitude: searchedIsCountry ? 0.98 : 0.58 }
       : JAKARTA_VIEW;
     globeRef.current.pointOfView(center, 1000);
     const controls = globeRef.current.controls();
     controls.autoRotate = !searchedCity;
     controls.autoRotateSpeed = 0.6;
-  }, [searchedCity]);
+  }, [searchedCity, searchedIsCountry]);
 
   const handleZoom = useCallback((pov: { lat: number; lng: number; altitude: number }) => {
     if (!onDeepZoom || hasTriggeredDeepZoom.current) return;
@@ -143,7 +148,7 @@ export const RiskGlobe = ({ searchedCity, regionWeather, regionLabel = 'Jakarta,
   }, [onDeepZoom]);
 
   return (
-    <Card className="overflow-hidden">
+    <Card className="weather-panel overflow-hidden rounded-2xl">
       <div ref={containerRef} className="relative w-full bg-[#0a1128]" style={{ height: dimensions.height }}>
         {!ready && (
           <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-[#0a1128] text-white/70">
@@ -228,8 +233,8 @@ export const RiskGlobe = ({ searchedCity, regionWeather, regionLabel = 'Jakarta,
         <Button size="icon" variant="secondary" className="absolute top-2 right-2 sm:top-3 sm:right-3 z-10 w-8 h-8 sm:w-9 sm:h-9 shadow-md" onClick={handleRecenter} aria-label="Recenter globe">
           <RotateCcw className="w-4 h-4" />
         </Button>
-        <div className="absolute top-2 left-2 sm:top-3 sm:left-3 z-10 bg-black/50 backdrop-blur-sm border border-white/10 rounded-lg px-2.5 py-1 text-[11px] sm:text-xs text-white/80">
-          Rotate · Zoom · Select a city for weather details
+        <div className="absolute left-3 top-3 z-30 w-[min(24rem,calc(100%-5.5rem))]">
+          <GlobeSearch selectedCity={searchedCity} selectedIsCountry={searchedIsCountry} onSelect={onSelectLocation} onReset={onResetSearch} />
         </div>
         <div className="absolute bottom-2 right-2 sm:bottom-3 sm:right-3 z-10 flex flex-col items-end gap-1">
           <div className="flex items-center gap-1.5 bg-black/55 backdrop-blur-sm border border-white/10 rounded-full px-2.5 py-1 text-[10px] sm:text-xs text-white/80">
@@ -249,7 +254,7 @@ export const RiskGlobe = ({ searchedCity, regionWeather, regionLabel = 'Jakarta,
                 <div className="min-w-0">
                   <h3 className="font-semibold text-sm sm:text-base text-foreground leading-snug">{selected.kind === 'area' ? selected.area.name : selected.kind === 'global-city' ? selected.city.name : selected.kind === 'searched' ? selected.city.name : selected.event.title}</h3>
                   {(selected.kind === 'area' || selected.kind === 'global-city') && <p className="text-xs text-muted-foreground">{selected.kind === 'area' ? `${selected.area.admin1 ? `${selected.area.admin1}, ` : ''}${selected.area.country}` : `${selected.city.admin1 ? `${selected.city.admin1}, ` : ''}${selected.city.country}`}</p>}
-                  {selected.kind === 'searched' && <p className="text-xs text-muted-foreground">{selected.city.admin1 ? `${selected.city.admin1}, ` : ''}{selected.city.country}</p>}
+                  {selected.kind === 'searched' && <p className="text-xs text-muted-foreground">{selected.city.name.toLowerCase() === selected.city.country.toLowerCase() ? 'Country overview' : getRegionLabel(selected.city)}</p>}
                 </div>
                 {(selected.kind === 'area' || selected.kind === 'global-city') && <RiskBadge level={selected.kind === 'area' ? selected.area.riskLevel : selected.city.riskLevel} showIcon={false} />}
                 <button onClick={() => setSelected(null)} className="text-muted-foreground hover:text-foreground transition-colors shrink-0" aria-label="Close"><X className="w-4 h-4" /></button>

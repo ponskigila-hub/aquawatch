@@ -59,7 +59,7 @@ const ForecastPage = () => {
   const today = outlookQuery.data?.days[0];
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="weather-shell">
       <header className="sticky top-0 z-20 border-b bg-card/80 backdrop-blur-md">
         <div className="container mx-auto flex items-center justify-between gap-3 px-4 py-3 sm:py-4">
           <div className="flex items-center gap-3 min-w-0">

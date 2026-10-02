@@ -130,8 +130,13 @@ const haversineKm = (aLat: number, aLng: number, bLat: number, bLng: number) => 
   return 6371 * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
 };
 
-export const getRegionLabel = (city?: CitySearchResult | null) =>
-  city ? `${city.name}${city.admin1 ? `, ${city.admin1}` : ''}, ${city.country}` : 'Jakarta, Indonesia';
+export const getRegionLabel = (city?: CitySearchResult | null) => {
+  if (!city) return 'Jakarta, Indonesia';
+  if (city.name.trim().toLowerCase() === city.country.trim().toLowerCase()) return city.country;
+  const admin1 = city.admin1?.trim();
+  const repeatedAdmin = admin1 && (admin1.toLowerCase() === city.name.trim().toLowerCase() || admin1.toLowerCase() === city.country.trim().toLowerCase());
+  return `${city.name}${admin1 && !repeatedAdmin ? `, ${admin1}` : ''}, ${city.country}`;
+};
 
 export const getRegionalLocations = (city?: CitySearchResult | null): WeatherLocation[] => {
   if (!city || (city.name.toLowerCase() === 'jakarta' && city.country.toLowerCase() === 'indonesia')) {

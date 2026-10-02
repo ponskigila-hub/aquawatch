@@ -9,6 +9,7 @@ import { WeatherSummary } from '@/components/WeatherSummary';
 import { useGlobalCityWeather } from '@/hooks/useGlobalCityWeather';
 import { fetchFloodStormEvents, type EonetEvent } from '@/lib/eonet';
 import { fetchCityWeather, weatherDescription, type CitySearchResult } from '@/lib/openMeteo';
+import { getRegionLabel } from '@/lib/globalWeather';
 import type { GlobalCityWeather, LiveAreaWeather, LiveRegionWeather } from '@/lib/globalWeather';
 import { ExternalLink, Loader2, MapPin, X } from 'lucide-react';
 
@@ -41,7 +42,7 @@ const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (character) => (
 const cityPopup = (city: GlobalCityWeather) => `
   <div style="min-width:210px;font-family:inherit;line-height:1.55">
     <strong style="font-size:15px">${escapeHtml(city.name)}</strong><br/>
-    <span style="color:#64748b">${escapeHtml(city.admin1 ? `${city.admin1}, ` : '')}${escapeHtml(city.country)}</span>
+    <span style="color:#64748b">${escapeHtml(getRegionLabel(city))}</span>
     <div style="margin-top:6px;font-size:14px"><strong>${city.temperatureC === null ? '—' : `${Math.round(city.temperatureC)}°C`}</strong> · ${escapeHtml(weatherDescription(city.weatherCode))}</div>
     <div style="font-size:12px">High ${city.todayHighC === null ? '—' : `${Math.round(city.todayHighC)}°C`} · Low ${city.todayLowC === null ? '—' : `${Math.round(city.todayLowC)}°C`}</div>
     <div style="margin-top:5px;font-size:12px">Rain today ${city.dailyRainfallMm === null ? '—' : `${city.dailyRainfallMm.toFixed(1)} mm`} · ${city.rainChancePercent === null ? '—' : `${Math.round(city.rainChancePercent)}% chance`}</div>
@@ -174,8 +175,8 @@ export const RiskMap2D = ({ searchedCity, initialCenter, regionWeather, regionLa
     }
     if (!initialCenter) map.current.flyTo([searchedCity.lat, searchedCity.lng], 7, { duration: 0.8 });
     const marker = L.circleMarker([searchedCity.lat, searchedCity.lng], { radius: 11, color: '#fff', fillColor: '#0ea5e9', fillOpacity: 1, weight: 3 }).addTo(map.current);
-    marker.bindTooltip(`${searchedCity.name}, ${searchedCity.country}`, { direction: 'top' });
-    marker.bindPopup(`<strong>${escapeHtml(searchedCity.name)}</strong><br/>${escapeHtml(searchedCity.country)}<br/>Loading local weather…`, { className: 'weather-popup' });
+    marker.bindTooltip(getRegionLabel(searchedCity), { direction: 'top' });
+    marker.bindPopup(`<strong>${escapeHtml(searchedCity.name)}</strong><br/>${escapeHtml(getRegionLabel(searchedCity))}<br/>Loading local weather…`, { className: 'weather-popup' });
     marker.on('click', () => setSelected({ kind: 'searched', city: searchedCity }));
     searchedMarkerRef.current = marker;
     setSelected({ kind: 'searched', city: searchedCity });
@@ -200,7 +201,7 @@ export const RiskMap2D = ({ searchedCity, initialCenter, regionWeather, regionLa
 
       {selected && <Card className="overflow-hidden">
         <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-3">
-          <div className="flex min-w-0 items-start gap-2"><MapPin className="mt-0.5 h-4 w-4 shrink-0 text-primary" /><div className="min-w-0"><CardTitle className="text-base">{selected.kind === 'city' ? selected.city.name : selected.kind === 'area' ? selected.area.name : selected.kind === 'searched' ? selected.city.name : selected.event.title}</CardTitle><CardDescription>{selected.kind === 'city' ? selected.city.country : selected.kind === 'area' ? `${selected.area.admin1 ? `${selected.area.admin1}, ` : ''}${selected.area.country}` : selected.kind === 'searched' ? `${selected.city.admin1 ? `${selected.city.admin1}, ` : ''}${selected.city.country}` : selected.event.category}</CardDescription></div></div>
+          <div className="flex min-w-0 items-start gap-2"><MapPin className="mt-0.5 h-4 w-4 shrink-0 text-primary" /><div className="min-w-0"><CardTitle className="text-base">{selected.kind === 'city' ? selected.city.name : selected.kind === 'area' ? selected.area.name : selected.kind === 'searched' ? selected.city.name : selected.event.title}</CardTitle><CardDescription>{selected.kind === 'city' || selected.kind === 'searched' ? getRegionLabel(selected.city) : selected.kind === 'area' ? `${selected.area.admin1 ? `${selected.area.admin1}, ` : ''}${selected.area.country}` : selected.event.category}</CardDescription></div></div>
           <Button variant="ghost" size="icon" className="h-7 w-7" aria-label="Close location details" onClick={() => setSelected(null)}><X className="h-4 w-4" /></Button>
         </CardHeader>
         <CardContent className="pt-0">
