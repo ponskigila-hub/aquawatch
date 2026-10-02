@@ -1,50 +1,47 @@
 import { Card, CardContent } from '@/components/ui/card';
-import { jakartaDistricts, rainfallHistory } from '@/data/mockData';
 import { AlertTriangle, Droplets, MapPin, Waves } from 'lucide-react';
+import { averageValues, type LiveRegionWeather } from '@/lib/globalWeather';
 
-export const StatsOverview = () => {
-  const highRiskCount = jakartaDistricts.filter((d) => d.riskLevel === 'high').length;
-  const floodProneCount = jakartaDistricts.filter((d) => d.isFloodProne).length;
-  const avgWaterLevel = Math.round(
-    jakartaDistricts.reduce((acc, curr) => acc + curr.waterLevel, 0) / jakartaDistricts.length
-  );
-  const todayRainfall = rainfallHistory[rainfallHistory.length - 1].rainfall;
-  const yesterdayRainfall = rainfallHistory[rainfallHistory.length - 2].rainfall;
-  const rainfallDelta = todayRainfall - yesterdayRainfall;
+interface StatsOverviewProps {
+  data?: LiveRegionWeather;
+  isLoading?: boolean;
+  regionLabel: string;
+}
 
+export const StatsOverview = ({ data, isLoading = false, regionLabel }: StatsOverviewProps) => {
+  const areas = data?.areas ?? [];
+  const highRiskCount = areas.filter((area) => area.riskLevel === 'high').length;
+  const averageRainfall = averageValues(areas.map((area) => area.latestDailyRainfallMm));
+  const averageDischarge = averageValues(areas.map((area) => area.latestDischargeM3s));
   const stats = [
     {
-      label: 'High Risk Areas',
-      value: highRiskCount,
-      total: jakartaDistricts.length,
+      label: 'Heavy Rain Areas',
+      value: areas.length ? highRiskCount : '—',
+      total: areas.length || undefined,
       icon: AlertTriangle,
-      tone: 'high' as const,
-      subtitle: highRiskCount > 0 ? 'Needs attention' : 'All clear',
+      tone: 'high',
+      subtitle: areas.length ? 'Places with the most rain today' : isLoading ? 'Loading live weather…' : 'Live data unavailable',
     },
     {
-      label: 'Flood-Prone Areas',
-      value: floodProneCount,
-      total: jakartaDistricts.length,
-      icon: MapPin,
-      tone: 'medium' as const,
-      subtitle: 'Historically at risk',
-    },
-    {
-      label: 'Avg Water Level',
-      value: `${avgWaterLevel}cm`,
-      icon: Waves,
-      tone: 'primary' as const,
-      subtitle: 'Across all districts',
-    },
-    {
-      label: "Today's Rainfall",
-      value: `${todayRainfall}mm`,
+      label: 'Area Avg. Rainfall',
+      value: averageRainfall === null ? '—' : `${averageRainfall.toFixed(1)} mm`,
       icon: Droplets,
-      tone: 'accent' as const,
-      subtitle:
-        rainfallDelta === 0
-          ? 'Same as yesterday'
-          : `${rainfallDelta > 0 ? '+' : ''}${rainfallDelta}mm vs. yesterday`,
+      tone: 'accent',
+      subtitle: 'Average rain expected today',
+    },
+    {
+      label: 'Average River Flow',
+      value: averageDischarge === null ? '—' : `${averageDischarge.toFixed(1)} m³/s`,
+      icon: Waves,
+      tone: 'primary',
+      subtitle: data?.dischargeAvailable ? 'How quickly nearby river water moves' : 'No nearby river estimate',
+    },
+    {
+      label: 'Nearby Places',
+      value: areas.length || (isLoading ? '…' : '—'),
+      icon: MapPin,
+      tone: 'medium',
+      subtitle: regionLabel,
     },
   ];
 
@@ -57,34 +54,19 @@ export const StatsOverview = () => {
 
   return (
     <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-4">
-      {stats.map((stat, index) => (
-        <Card
-          key={index}
-          className="transition-all hover:shadow-md hover:-translate-y-0.5 duration-200"
-        >
+      {stats.map((stat) => (
+        <Card key={stat.label} className="transition-all hover:shadow-md hover:-translate-y-0.5 duration-200">
           <CardContent className="p-4 sm:p-5">
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
-                <p className="text-xs sm:text-sm font-medium text-muted-foreground leading-snug">
-                  {stat.label}
-                </p>
+                <p className="text-xs sm:text-sm font-medium text-muted-foreground leading-snug">{stat.label}</p>
                 <h3 className="text-xl sm:text-3xl font-bold mt-1 sm:mt-1.5 tracking-tight">
                   {stat.value}
-                  {stat.total && (
-                    <span className="text-sm sm:text-lg text-muted-foreground font-medium">
-                      /{stat.total}
-                    </span>
-                  )}
+                  {stat.total !== undefined && <span className="text-sm sm:text-lg text-muted-foreground font-medium">/{stat.total}</span>}
                 </h3>
-                {stat.subtitle && (
-                  <p className="text-[11px] sm:text-xs text-muted-foreground mt-1 truncate">
-                    {stat.subtitle}
-                  </p>
-                )}
+                <p className="text-[11px] sm:text-xs text-muted-foreground mt-1 truncate">{stat.subtitle}</p>
               </div>
-              <div
-                className={`w-9 h-9 sm:w-11 sm:h-11 rounded-xl flex items-center justify-center shrink-0 ${toneStyles[stat.tone]}`}
-              >
+              <div className={`w-9 h-9 sm:w-11 sm:h-11 rounded-xl flex items-center justify-center shrink-0 ${toneStyles[stat.tone]}`}>
                 <stat.icon className="w-4 h-4 sm:w-5 sm:h-5" />
               </div>
             </div>

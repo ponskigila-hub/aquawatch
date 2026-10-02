@@ -1,13 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
 import { Search, MapPin, Loader2, X } from 'lucide-react';
-import { searchCities, CitySearchResult } from '@/lib/openMeteo';
+import { searchCities, type CitySearchResult } from '@/lib/openMeteo';
 
 interface CitySearchProps {
   onSelect: (city: CitySearchResult) => void;
+  onReset?: () => void;
   placeholder?: string;
 }
 
-export const CitySearch = ({ onSelect, placeholder = 'Search any city worldwide‚Ä¶' }: CitySearchProps) => {
+export const CitySearch = ({ onSelect, onReset, placeholder = 'Search any city worldwide‚Ä¶' }: CitySearchProps) => {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<CitySearchResult[]>([]);
   const [loading, setLoading] = useState(false);
@@ -27,8 +28,7 @@ export const CitySearch = ({ onSelect, placeholder = 'Search any city worldwide‚
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(async () => {
       try {
-        const cities = await searchCities(query);
-        setResults(cities);
+        setResults(await searchCities(query));
       } catch {
         setError(true);
         setResults([]);
@@ -36,17 +36,12 @@ export const CitySearch = ({ onSelect, placeholder = 'Search any city worldwide‚
         setLoading(false);
       }
     }, 400);
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-    };
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   }, [query]);
 
-  // Close the dropdown on outside click
   useEffect(() => {
-    const handleClick = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
+    const handleClick = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) setOpen(false);
     };
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
@@ -57,11 +52,11 @@ export const CitySearch = ({ onSelect, placeholder = 'Search any city worldwide‚
     setQuery(`${city.name}, ${city.country}`);
     setOpen(false);
   };
-
   const handleClear = () => {
     setQuery('');
     setResults([]);
     setOpen(false);
+    onReset?.();
   };
 
   return (
@@ -71,58 +66,24 @@ export const CitySearch = ({ onSelect, placeholder = 'Search any city worldwide‚
         <input
           type="text"
           value={query}
-          onChange={(e) => {
-            setQuery(e.target.value);
-            setOpen(true);
-          }}
+          onChange={(event) => { setQuery(event.target.value); setOpen(true); }}
           onFocus={() => query && setOpen(true)}
           placeholder={placeholder}
           className="w-full pl-9 pr-8 py-2 text-sm rounded-lg border bg-card focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/50 transition-all"
+          aria-label="Search city worldwide"
         />
-        {query && (
-          <button
-            onClick={handleClear}
-            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-            aria-label="Clear search"
-          >
-            <X className="w-3.5 h-3.5" />
-          </button>
-        )}
+        {query && <button onClick={handleClear} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" aria-label="Clear city selection"><X className="w-3.5 h-3.5" /></button>}
       </div>
-
       {open && query && (
         <div className="absolute z-30 mt-1.5 w-full bg-popover border rounded-lg shadow-lg overflow-hidden">
-          {loading ? (
-            <div className="flex items-center gap-2 px-3 py-3 text-sm text-muted-foreground">
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              Searching‚Ä¶
-            </div>
-          ) : error ? (
-            <div className="px-3 py-3 text-sm text-muted-foreground">
-              Couldn't reach the search service. Check your connection.
-            </div>
-          ) : results.length === 0 ? (
-            <div className="px-3 py-3 text-sm text-muted-foreground">No cities found for "{query}"</div>
-          ) : (
-            <ul className="max-h-64 overflow-y-auto py-1">
-              {results.map((city) => (
-                <li key={city.id}>
-                  <button
-                    onClick={() => handleSelect(city)}
-                    className="w-full text-left px-3 py-2 text-sm hover:bg-accent/10 flex items-center gap-2 transition-colors"
-                  >
-                    <MapPin className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                    <span className="truncate">
-                      <span className="font-medium text-foreground">{city.name}</span>
-                      <span className="text-muted-foreground">
-                        {city.admin1 ? `, ${city.admin1}` : ''}, {city.country}
-                      </span>
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
+          {loading ? <div className="flex items-center gap-2 px-3 py-3 text-sm text-muted-foreground"><Loader2 className="w-3.5 h-3.5 animate-spin" />Searching‚Ä¶</div>
+            : error ? <div className="px-3 py-3 text-sm text-muted-foreground">Couldn‚Äôt reach the city search service. Check your connection.</div>
+              : results.length === 0 ? <div className="px-3 py-3 text-sm text-muted-foreground">No cities found for ‚Äú{query}‚Äù</div>
+                : <ul className="max-h-64 overflow-y-auto py-1">{results.map((city) => (
+                  <li key={city.id}><button onClick={() => handleSelect(city)} className="w-full text-left px-3 py-2 text-sm hover:bg-accent/10 flex items-center gap-2 transition-colors">
+                    <MapPin className="w-3.5 h-3.5 text-muted-foreground shrink-0" /><span className="truncate"><span className="font-medium text-foreground">{city.name}</span><span className="text-muted-foreground">{city.admin1 ? `, ${city.admin1}` : ''}, {city.country}</span></span>
+                  </button></li>
+                ))}</ul>}
         </div>
       )}
     </div>

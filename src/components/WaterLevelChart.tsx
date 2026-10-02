@@ -1,22 +1,27 @@
 import { TrendChart } from '@/components/TrendChart';
-import { waterLevelHistory } from '@/data/mockData';
+import type { LiveRegionWeather } from '@/lib/globalWeather';
 
-export const WaterLevelChart = () => {
-  const last7Days = waterLevelHistory.slice(-7);
-  
+interface WaterLevelChartProps {
+  data?: LiveRegionWeather;
+  regionLabel: string;
+}
+
+export const WaterLevelChart = ({ data, regionLabel }: WaterLevelChartProps) => {
+  const last7Days = (data?.dischargeTrend ?? []).slice(-7)
+    .filter((entry) => entry.value !== null)
+    .map((entry) => ({ date: entry.date, discharge: entry.value as number }));
+
   return (
     <TrendChart
       data={last7Days}
-      title="7-Day Water Level Trend"
-      description="Average water level in cm across Jakarta"
-      dataKey="waterLevel"
-      yAxisLabel="Water Level (cm)"
-      tooltipLabel="cm"
+      title="7-Day River Flow"
+      description={data?.dischargeAvailable
+        ? `Estimated daily flow in nearby rivers for ${regionLabel}. m³/s shows water passing each second, not water height.`
+        : `No nearby river-flow estimate is available for ${regionLabel}.`}
+      dataKey="discharge"
+      yAxisLabel="River flow (m³/s)"
+      tooltipLabel=" m³/s"
       chartColor="hsl(var(--chart-2))"
-      referenceLines={[
-        { value: 60, color: 'hsl(var(--risk-medium))', label: 'Alert Level' },
-        { value: 80, color: 'hsl(var(--risk-high))', label: 'Danger Level' }
-      ]}
     />
   );
 };

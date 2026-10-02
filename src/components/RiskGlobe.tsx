@@ -1,67 +1,54 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
-import Globe, { GlobeMethods } from 'react-globe.gl';
+import Globe, { type GlobeMethods } from 'react-globe.gl';
 import { toast } from 'sonner';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { RiskBadge } from '@/components/RiskBadge';
-import { jakartaDistricts } from '@/data/mockData';
-import { fetchFloodStormEvents, EonetEvent } from '@/lib/eonet';
-import { fetchCityWeather, CitySearchResult } from '@/lib/openMeteo';
-import { fetchForecast, ForecastFeature } from '@/lib/forecast';
-import { DistrictData } from '@/types/flood';
+import { useGlobalCityWeather } from '@/hooks/useGlobalCityWeather';
+import { fetchFloodStormEvents, type EonetEvent } from '@/lib/eonet';
+import { fetchCityWeather, weatherDescription, type CitySearchResult } from '@/lib/openMeteo';
+import type { GlobalCityWeather, LiveAreaWeather, LiveRegionWeather } from '@/lib/globalWeather';
+import { useQuery } from '@tanstack/react-query';
 import { formatDistanceToNow } from 'date-fns';
-import { X, Droplets, Waves, Loader2, RotateCcw, Radio, ExternalLink, Thermometer } from 'lucide-react';
+import { X, Loader2, RotateCcw, Radio, ExternalLink } from 'lucide-react';
+import { WeatherSummary } from '@/components/WeatherSummary';
 
 const riskColors: Record<string, string> = {
   safe: '#22c55e',
   medium: '#f59e0b',
   high: '#ef4444',
 };
-
 const disasterColors: Record<string, string> = {
   Floods: '#38bdf8',
   'Severe Storms': '#a855f7',
 };
 const disasterColor = (category: string) => disasterColors[category] ?? '#fb923c';
-
-const hexToRgba = (hex: string, alpha: number) => {
-  const bigint = parseInt(hex.replace('#', ''), 16);
-  const r = (bigint >> 16) & 255;
-  const g = (bigint >> 8) & 255;
-  const b = bigint & 255;
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-};
-
 const JAKARTA_VIEW = { lat: -6.2, lng: 106.85, altitude: 1.7 };
-
-// Below this altitude, the globe's cylindrical point markers start looking
-// distorted at oblique viewing angles (a known three-globe limitation for
-// close-together points). Past this point, a flat 2D map is simply the
-// better tool, so we hand off to it automatically.
 const DEEP_ZOOM_ALTITUDE_THRESHOLD = 0.45;
 
-type GlobePoint =
-  | { kind: 'district'; lat: number; lng: number; district: DistrictData }
+const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (character) => ({
+  '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+}[character] ?? character));
+
+ type GlobePoint =
+  | { kind: 'area'; lat: number; lng: number; area: LiveAreaWeather }
+  | { kind: 'global-city'; lat: number; lng: number; city: GlobalCityWeather }
   | { kind: 'disaster'; lat: number; lng: number; event: EonetEvent }
-  | { kind: 'searched'; lat: number; lng: number; city: CitySearchResult }
-  | { kind: 'forecast'; lat: number; lng: number; prediction: number; horizonHours: number };
+  | { kind: 'searched'; lat: number; lng: number; city: CitySearchResult };
 
 interface RiskGlobeProps {
   searchedCity?: CitySearchResult | null;
+  regionWeather?: LiveRegionWeather;
+  regionLabel?: string;
   onDeepZoom?: (lat: number, lng: number) => void;
 }
 
-export const RiskGlobe = ({ searchedCity, onDeepZoom }: RiskGlobeProps) => {
+export const RiskGlobe = ({ searchedCity, regionWeather, regionLabel = 'Jakarta, Indonesia', onDeepZoom }: RiskGlobeProps) => {
   const globeRef = useRef<GlobeMethods | undefined>(undefined);
   const containerRef = useRef<HTMLDivElement>(null);
-  const navigate = useNavigate();
   const [dimensions, setDimensions] = useState({ width: 300, height: 460 });
   const [ready, setReady] = useState(false);
   const [selected, setSelected] = useState<GlobePoint | null>(null);
-  const [forecastPoints, setForecastPoints] = useState<GlobePoint[]>([]);
-  const [forecastLoading, setForecastLoading] = useState(false);
   const hasTriggeredDeepZoom = useRef(false);
 
   const { data: disasterEvents = [], isError: eventsErrored } = useQuery({
@@ -70,80 +57,35 @@ export const RiskGlobe = ({ searchedCity, onDeepZoom }: RiskGlobeProps) => {
     staleTime: 15 * 60 * 1000,
     retry: 1,
   });
-
-  const { data: searchedWeather, isLoading: weatherLoading } = useQuery({
-    queryKey: ['city-weather', searchedCity?.id],
-    queryFn: () => fetchCityWeather(searchedCity!.lat, searchedCity!.lng),
-    enabled: !!searchedCity,
+  const { data: globalCities = [], isLoading: globalCitiesLoading } = useGlobalCityWeather();
+  const selectedWeatherLocation = selected && selected.kind !== 'disaster' ? selected : null;
+  const { data: selectedWeather, isLoading: selectedWeatherLoading, isError: selectedWeatherErrored } = useQuery({
+    queryKey: ['selected-globe-weather', selectedWeatherLocation?.lat, selectedWeatherLocation?.lng],
+    queryFn: () => fetchCityWeather(selectedWeatherLocation!.lat, selectedWeatherLocation!.lng),
+    enabled: !!selectedWeatherLocation,
     staleTime: 10 * 60 * 1000,
     retry: 1,
   });
 
-  const districtPoints: GlobePoint[] = jakartaDistricts.map((d) => ({
-    kind: 'district',
-    lat: d.coordinates[0],
-    lng: d.coordinates[1],
-    district: d,
+  const areaPoints: GlobePoint[] = (regionWeather?.areas ?? []).map((area) => ({
+    kind: 'area', lat: area.lat, lng: area.lng, area,
   }));
-
-  const disasterPoints: GlobePoint[] = disasterEvents.map((e) => ({
-    kind: 'disaster',
-    lat: e.lat,
-    lng: e.lng,
-    event: e,
+  const globalPoints: GlobePoint[] = globalCities
+    .filter((city) => city.temperatureC !== null || city.dailyRainfallMm !== null)
+    .map((city) => ({ kind: 'global-city', lat: city.lat, lng: city.lng, city }));
+  const disasterPoints: GlobePoint[] = disasterEvents.map((event) => ({
+    kind: 'disaster', lat: event.lat, lng: event.lng, event,
   }));
-
   const searchedPoint: GlobePoint | null = searchedCity
     ? { kind: 'searched', lat: searchedCity.lat, lng: searchedCity.lng, city: searchedCity }
     : null;
-
-  const handleForecast = useCallback(async () => {
-    if (forecastPoints.length > 0) {
-      setForecastPoints([]);
-      return;
-    }
-    const center = searchedCity ?? { lat: -6.2088, lng: 106.8456 };
-    const halfSpan = 1.5;
-    setForecastLoading(true);
-    try {
-      const result = await fetchForecast({
-        bbox: {
-          west: Math.max(-180, center.lng - halfSpan),
-          south: Math.max(-90, center.lat - halfSpan),
-          east: Math.min(180, center.lng + halfSpan),
-          north: Math.min(90, center.lat + halfSpan),
-        },
-        grid_width: 16,
-        grid_height: 10,
-        horizon_hours: 24,
-        variable: 'precipitation',
-      });
-      const points: GlobePoint[] = result.features.map((feature: ForecastFeature) => ({
-        kind: 'forecast',
-        lng: feature.geometry.coordinates[0],
-        lat: feature.geometry.coordinates[1],
-        prediction: feature.properties.prediction,
-        horizonHours: feature.properties.horizon_hours,
-      }));
-      setForecastPoints(points);
-      toast.warning('Illustrative model output only — not a validated weather forecast.', { duration: 5000 });
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Could not load the forecast layer');
-    } finally {
-      setForecastLoading(false);
-    }
-  }, [forecastPoints.length, searchedCity]);
-
   const allPoints = useMemo(
-    () => [...districtPoints, ...disasterPoints, ...(searchedPoint ? [searchedPoint] : []), ...forecastPoints],
+    () => [...globalPoints, ...areaPoints, ...disasterPoints, ...(searchedPoint ? [searchedPoint] : [])],
+    // Source arrays are derived directly from the query values above.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [disasterEvents, searchedCity, forecastPoints]
+    [globalCities, regionWeather, disasterEvents, searchedCity],
   );
 
-  // Fallback: three-globe's texture loader has no error handler, so if the
-  // globe/bump image ever fails to load (flaky network, ad-blocker, CDN
-  // hiccup), onGlobeReady never fires. Don't let the UI hang forever —
-  // reveal the (still-interactive) globe after a short wait regardless.
   useEffect(() => {
     const fallback = setTimeout(() => setReady(true), 3500);
     return () => clearTimeout(fallback);
@@ -161,10 +103,6 @@ export const RiskGlobe = ({ searchedCity, onDeepZoom }: RiskGlobeProps) => {
     return () => window.removeEventListener('resize', updateSize);
   }, []);
 
-  // Initial camera position + gentle auto-rotate. Runs on mount rather than
-  // waiting for `ready`, since controls()/pointOfView() are available as
-  // soon as the Globe component mounts — texture loading happens separately
-  // and shouldn't block camera setup.
   useEffect(() => {
     if (!globeRef.current) return;
     globeRef.current.pointOfView(JAKARTA_VIEW, 0);
@@ -172,53 +110,46 @@ export const RiskGlobe = ({ searchedCity, onDeepZoom }: RiskGlobeProps) => {
     controls.autoRotate = true;
     controls.autoRotateSpeed = 0.6;
     controls.enableZoom = true;
-
-    const stopRotation = () => {
-      controls.autoRotate = false;
-    };
+    const stopRotation = () => { controls.autoRotate = false; };
     controls.addEventListener('start', stopRotation);
     return () => controls.removeEventListener('start', stopRotation);
   }, []);
 
-  // Fly to a searched city and open its info panel automatically
   useEffect(() => {
     if (!searchedCity || !globeRef.current) return;
     globeRef.current.pointOfView({ lat: searchedCity.lat, lng: searchedCity.lng, altitude: 1.4 }, 1200);
-    const controls = globeRef.current.controls();
-    controls.autoRotate = false;
+    globeRef.current.controls().autoRotate = false;
     setSelected({ kind: 'searched', lat: searchedCity.lat, lng: searchedCity.lng, city: searchedCity });
   }, [searchedCity]);
 
   const handleRecenter = useCallback(() => {
     if (!globeRef.current) return;
-    globeRef.current.pointOfView(JAKARTA_VIEW, 1000);
+    const center = searchedCity
+      ? { lat: searchedCity.lat, lng: searchedCity.lng, altitude: 1.4 }
+      : JAKARTA_VIEW;
+    globeRef.current.pointOfView(center, 1000);
     const controls = globeRef.current.controls();
-    controls.autoRotate = true;
+    controls.autoRotate = !searchedCity;
     controls.autoRotateSpeed = 0.6;
-  }, []);
+  }, [searchedCity]);
 
-  const handleZoom = useCallback(
-    (pov: { lat: number; lng: number; altitude: number }) => {
-      if (!onDeepZoom || hasTriggeredDeepZoom.current) return;
-      if (pov.altitude < DEEP_ZOOM_ALTITUDE_THRESHOLD) {
-        hasTriggeredDeepZoom.current = true;
-        toast('Zoomed in close — switching to map view for a clearer look', { duration: 2500 });
-        onDeepZoom(pov.lat, pov.lng);
-      }
-    },
-    [onDeepZoom]
-  );
+  const handleZoom = useCallback((pov: { lat: number; lng: number; altitude: number }) => {
+    if (!onDeepZoom || hasTriggeredDeepZoom.current) return;
+    if (pov.altitude < DEEP_ZOOM_ALTITUDE_THRESHOLD) {
+      hasTriggeredDeepZoom.current = true;
+      toast('Zoomed in close — switching to map view for a clearer look', { duration: 2500 });
+      onDeepZoom(pov.lat, pov.lng);
+    }
+  }, [onDeepZoom]);
 
   return (
     <Card className="overflow-hidden">
       <div ref={containerRef} className="relative w-full bg-[#0a1128]" style={{ height: dimensions.height }}>
         {!ready && (
           <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-[#0a1128] text-white/70">
-            <Loader2 className="w-6 h-6 animate-spin" />
-            <p className="text-xs">Loading globe…</p>
+            <Loader2 className="w-6 h-6 animate-spin" /><p className="text-xs">Loading globe…</p>
           </div>
         )}
-
         <Globe
           ref={globeRef}
           width={dimensions.width}
@@ -233,260 +164,123 @@ export const RiskGlobe = ({ searchedCity, onDeepZoom }: RiskGlobeProps) => {
           pointsData={allPoints}
           pointLat="lat"
           pointLng="lng"
-          pointColor={(p: object) => {
-            const point = p as GlobePoint;
-            if (point.kind === 'district') return riskColors[point.district.riskLevel];
+          pointColor={(raw: object) => {
+            const point = raw as GlobePoint;
+            if (point.kind === 'area') return riskColors[point.area.riskLevel];
+            if (point.kind === 'global-city') return riskColors[point.city.riskLevel];
             if (point.kind === 'disaster') return disasterColor(point.event.category);
-            if (point.kind === 'forecast') {
-              if (point.prediction < 0.25) return '#38bdf8';
-              if (point.prediction < 0.5) return '#22d3ee';
-              if (point.prediction < 0.75) return '#facc15';
-              return '#fb7185';
-            }
-            return '#eab308'; // searched city marker
+            return '#eab308';
           }}
-          pointAltitude={(p: object) => ((p as GlobePoint).kind === 'searched' ? 0.03 : 0.02)}
-          pointRadius={(p: object) => {
-            const point = p as GlobePoint;
-            // Jakarta's districts sit only ~0.07° apart at the closest pair,
-            // so these stay well under that even at the highest rainfall
-            // value to avoid the markers visually merging into each other.
-            if (point.kind === 'district') return 0.018 + point.district.rainfall / 6800;
-            if (point.kind === 'forecast') return 0.055;
-            if (point.kind === 'searched') return 0.55;
-            return 0.3;
+          pointAltitude={(raw: object) => (raw as GlobePoint).kind === 'searched' ? 0.03 : 0.015}
+          pointRadius={(raw: object) => {
+            const point = raw as GlobePoint;
+            if (point.kind === 'area') return 0.11;
+            if (point.kind === 'global-city') return 0.085;
+            if (point.kind === 'searched') return 0.4;
+            return 0.22;
           }}
-          pointLabel={(p: object) => {
-            const point = p as GlobePoint;
-            if (point.kind === 'district') {
-              const d = point.district;
-              return `<div style="font-family:inherit;background:rgba(15,23,42,0.9);color:white;padding:6px 10px;border-radius:6px;font-size:12px;">
-                <b>${d.name}</b><br/>${d.rainfall}mm rainfall · ${d.waterLevel}cm water
+          pointLabel={(raw: object) => {
+            const point = raw as GlobePoint;
+            if (point.kind === 'area' || point.kind === 'global-city') {
+              const name = point.kind === 'area' ? point.area.name : point.city.name;
+              const country = point.kind === 'area' ? point.area.country : point.city.country;
+              const temperature = point.kind === 'area' ? point.area.temperatureC : point.city.temperatureC;
+              const rainfall = point.kind === 'area' ? point.area.latestDailyRainfallMm : point.city.dailyRainfallMm;
+              const discharge = point.kind === 'area' ? point.area.latestDischargeM3s : null;
+              const high = point.kind === 'area' ? point.area.todayHighC : point.city.todayHighC;
+              const low = point.kind === 'area' ? point.area.todayLowC : point.city.todayLowC;
+              const condition = point.kind === 'area' ? point.area.weatherCode : point.city.weatherCode;
+              const rainChance = point.kind === 'area' ? point.area.rainChancePercent : point.city.rainChancePercent;
+              const wind = point.kind === 'area' ? point.area.windKph : point.city.windKph;
+              const humidity = point.kind === 'area' ? point.area.humidityPercent : point.city.humidityPercent;
+              return `<div style="font-family:inherit;background:rgba(15,23,42,.94);color:white;padding:7px 10px;border-radius:7px;font-size:12px;">
+                <b>${escapeHtml(name)}</b><br/>${escapeHtml(country)}<br/>
+                ${temperature === null ? '—' : `${Math.round(temperature)}°C`} · ${escapeHtml(weatherDescription(condition))}<br/>
+                High ${high === null ? '—' : `${Math.round(high)}°C`} · Low ${low === null ? '—' : `${Math.round(low)}°C`}<br/>
+                Rain today ${rainfall === null ? '—' : `${rainfall.toFixed(1)} mm`} · Chance ${rainChance === null ? '—' : `${Math.round(rainChance)}%`}<br/>
+                Wind ${wind === null ? '—' : `${Math.round(wind)} km/h`} · Humidity ${humidity === null ? '—' : `${Math.round(humidity)}%`}
+                ${discharge === null ? '' : `<br/>Nearby river flow ${discharge.toFixed(1)} m³/s`}
               </div>`;
             }
             if (point.kind === 'searched') {
-              return `<div style="font-family:inherit;background:rgba(15,23,42,0.9);color:white;padding:6px 10px;border-radius:6px;font-size:12px;">
-                <b>${point.city.name}</b><br/>${point.city.country}
-              </div>`;
+              return `<div style="font-family:inherit;background:rgba(15,23,42,.94);color:white;padding:7px 10px;border-radius:7px;font-size:12px;"><b>${escapeHtml(point.city.name)}</b><br/>${escapeHtml(point.city.country)}</div>`;
             }
-            if (point.kind === 'forecast') {
-              return `<div style="font-family:inherit;background:rgba(15,23,42,0.9);color:white;padding:6px 10px;border-radius:6px;font-size:12px;">
-                <b>AI precipitation demo</b><br/>Normalized value: ${point.prediction.toFixed(2)} · ${point.horizonHours}h
-              </div>`;
-            }
-            const e = point.event;
-            return `<div style="font-family:inherit;background:rgba(15,23,42,0.9);color:white;padding:6px 10px;border-radius:6px;font-size:12px;max-width:220px;">
-              <b>${e.title}</b><br/>${e.category} · NASA EONET
-            </div>`;
+            return `<div style="font-family:inherit;background:rgba(15,23,42,.94);color:white;padding:7px 10px;border-radius:7px;font-size:12px;max-width:220px;"><b>${escapeHtml(point.event.title)}</b><br/>${escapeHtml(point.event.category)} · reported event</div>`;
           }}
-          onPointClick={(p: object) => {
-            const point = p as GlobePoint;
-            if (point.kind !== 'forecast') setSelected(point);
-          }}
+          onPointClick={(raw: object) => setSelected(raw as GlobePoint)}
           ringsData={[...disasterPoints, ...(searchedPoint ? [searchedPoint] : [])]}
           ringLat="lat"
           ringLng="lng"
-          ringColor={(p: object) => {
-            const point = p as GlobePoint;
-            const color = point.kind === 'searched'
-              ? '#eab308'
-              : point.kind === 'disaster'
-                ? disasterColor(point.event.category)
-                : '#ffffff';
-            return (t: number) => hexToRgba(color, 1 - t);
+          ringColor={(raw: object) => {
+            const point = raw as GlobePoint;
+            const color = point.kind === 'searched' ? '#eab308' : point.kind === 'disaster' ? disasterColor(point.event.category) : '#ffffff';
+            return (t: number) => {
+              const hex = color.replace('#', '');
+              const r = parseInt(hex.slice(0, 2), 16), g = parseInt(hex.slice(2, 4), 16), b = parseInt(hex.slice(4, 6), 16);
+              return `rgba(${r},${g},${b},${1 - t})`;
+            };
           }}
           ringMaxRadius={2.2}
           ringPropagationSpeed={1.8}
           ringRepeatPeriod={1400}
         />
 
-        {/* Recenter control */}
-        <Button
-          size="icon"
-          variant="secondary"
-          className="absolute top-2 right-2 sm:top-3 sm:right-3 z-10 w-8 h-8 sm:w-9 sm:h-9 shadow-md"
-          onClick={handleRecenter}
-          aria-label="Recenter globe on Jakarta"
-        >
+        <Button size="icon" variant="secondary" className="absolute top-2 right-2 sm:top-3 sm:right-3 z-10 w-8 h-8 sm:w-9 sm:h-9 shadow-md" onClick={handleRecenter} aria-label="Recenter globe">
           <RotateCcw className="w-4 h-4" />
         </Button>
-
-        <div className="absolute top-2 left-2 sm:top-3 sm:left-3 z-10 flex flex-col sm:flex-row items-start sm:items-center gap-1.5">
-          <div className="bg-black/50 backdrop-blur-sm border border-white/10 rounded-lg px-2.5 py-1 text-[11px] sm:text-xs text-white/80">
-            Drag to rotate · Scroll to zoom · Click a point for details
+        <div className="absolute top-2 left-2 sm:top-3 sm:left-3 z-10 bg-black/50 backdrop-blur-sm border border-white/10 rounded-lg px-2.5 py-1 text-[11px] sm:text-xs text-white/80">
+          Rotate · Zoom · Select a city for weather details
+        </div>
+        <div className="absolute bottom-2 right-2 sm:bottom-3 sm:right-3 z-10 flex flex-col items-end gap-1">
+          <div className="flex items-center gap-1.5 bg-black/55 backdrop-blur-sm border border-white/10 rounded-full px-2.5 py-1 text-[10px] sm:text-xs text-white/80">
+            <Radio className="w-3 h-3 text-sky-300" />{globalCitiesLoading ? 'Loading cities around the world…' : `Weather in ${globalCities.length} cities`}
           </div>
-          <Button
-            size="sm"
-            variant="secondary"
-            className="h-7 px-2.5 text-[11px] shadow-md"
-            onClick={() => void handleForecast()}
-            disabled={forecastLoading}
-            aria-label={forecastPoints.length > 0 ? 'Hide forecast layer' : 'Show illustrative 24-hour forecast layer'}
-          >
-            {forecastLoading ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <Waves className="w-3 h-3 mr-1" />}
-            {forecastLoading ? 'Forecasting…' : forecastPoints.length > 0 ? 'Hide forecast' : 'AI forecast · 24h'}
-          </Button>
+          {!eventsErrored && disasterEvents.length > 0 && (
+            <div className="flex items-center gap-1.5 bg-black/55 backdrop-blur-sm border border-white/10 rounded-full px-2.5 py-1 text-[10px] sm:text-xs text-white/80">
+            <Radio className="w-3 h-3 text-purple-400" />{disasterEvents.length} reported events worldwide
+            </div>
+          )}
         </div>
 
-        {forecastPoints.length > 0 && (
-          <div className="absolute bottom-2 left-2 sm:bottom-3 sm:left-3 z-10 rounded-lg border border-amber-300/30 bg-black/65 px-2.5 py-1 text-[10px] sm:text-xs text-amber-100">
-            Illustrative model output · not a validated forecast
-          </div>
-        )}
-
-        {!eventsErrored && disasterEvents.length > 0 && (
-          <div className="absolute bottom-2 right-2 sm:bottom-3 sm:right-3 z-10 flex items-center gap-1.5 bg-black/50 backdrop-blur-sm border border-white/10 rounded-full px-2.5 py-1 text-[11px] sm:text-xs text-white/80">
-            <Radio className="w-3 h-3 text-purple-400" />
-            {disasterEvents.length} live events · NASA EONET
-          </div>
-        )}
-
-        {/* Selected point info panel */}
         {selected && (
           <div className="absolute bottom-3 left-3 right-3 sm:left-3 sm:right-auto sm:w-80 z-20 animate-in fade-in slide-in-from-bottom-2 duration-200">
-            <Card className="border-2 shadow-xl">
-              <CardContent className="p-4">
-                {selected.kind === 'district' && (
-                  <>
-                    <div className="flex items-start justify-between gap-2 mb-2">
-                      <h3 className="font-semibold text-sm sm:text-base text-foreground">{selected.district.name}</h3>
-                      <div className="flex items-center gap-1.5">
-                        <RiskBadge level={selected.district.riskLevel} showIcon={false} />
-                        <button
-                          onClick={() => setSelected(null)}
-                          className="text-muted-foreground hover:text-foreground transition-colors"
-                          aria-label="Close"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-4 text-xs sm:text-sm text-foreground/70 mb-3">
-                      <span className="flex items-center gap-1">
-                        <Droplets className="w-3.5 h-3.5" />
-                        {selected.district.rainfall}mm
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <Waves className="w-3.5 h-3.5" />
-                        {selected.district.waterLevel}cm
-                      </span>
-                    </div>
-                    <Button size="sm" className="w-full" onClick={() => navigate(`/district/${selected.district.id}`)}>
-                      View full details →
-                    </Button>
-                  </>
-                )}
-
-                {selected.kind === 'disaster' && (
-                  <>
-                    <div className="flex items-start justify-between gap-2 mb-2">
-                      <h3 className="font-semibold text-sm sm:text-base text-foreground leading-snug pr-2">
-                        {selected.event.title}
-                      </h3>
-                      <button
-                        onClick={() => setSelected(null)}
-                        className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
-                        aria-label="Close"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    </div>
-                    <div className="flex items-center gap-2 mb-3">
-                      <span
-                        className="text-xs font-medium px-2 py-0.5 rounded-full text-white"
-                        style={{ backgroundColor: disasterColor(selected.event.category) }}
-                      >
-                        {selected.event.category}
-                      </span>
-                      <span className="text-xs text-foreground/60">
-                        {formatDistanceToNow(new Date(selected.event.date), { addSuffix: true })}
-                      </span>
-                    </div>
-                    <p className="text-xs text-foreground/60 mb-3">Live event data from NASA EONET</p>
-                    {selected.event.link && (
-                      <Button size="sm" variant="outline" className="w-full gap-1.5" asChild>
-                        <a href={selected.event.link} target="_blank" rel="noopener noreferrer">
-                          View source on NASA <ExternalLink className="w-3.5 h-3.5" />
-                        </a>
-                      </Button>
-                    )}
-                  </>
-                )}
-
-                {selected.kind === 'searched' && (
-                  <>
-                    <div className="flex items-start justify-between gap-2 mb-2">
-                      <div>
-                        <h3 className="font-semibold text-sm sm:text-base text-foreground">{selected.city.name}</h3>
-                        <p className="text-xs text-foreground/60">
-                          {selected.city.admin1 ? `${selected.city.admin1}, ` : ''}
-                          {selected.city.country}
-                        </p>
-                      </div>
-                      <button
-                        onClick={() => setSelected(null)}
-                        className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
-                        aria-label="Close"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    </div>
-                    {weatherLoading ? (
-                      <div className="flex items-center gap-2 text-xs text-foreground/60 py-2">
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        Fetching live weather…
-                      </div>
-                    ) : searchedWeather ? (
-                      <div className="flex items-center gap-4 text-xs sm:text-sm text-foreground/70 mb-3">
-                        <span className="flex items-center gap-1">
-                          <Droplets className="w-3.5 h-3.5" />
-                          {searchedWeather.rainfallTodayMm}mm today
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <Thermometer className="w-3.5 h-3.5" />
-                          {Math.round(searchedWeather.tempC)}°C
-                        </span>
-                      </div>
-                    ) : (
-                      <p className="text-xs text-foreground/60 mb-3">Live weather unavailable right now.</p>
-                    )}
-                    <p className="text-[11px] text-foreground/50">Live data from Open-Meteo</p>
-                  </>
-                )}
-              </CardContent>
-            </Card>
+            <Card className="border-2 shadow-xl"><CardContent className="p-4">
+              <div className="flex items-start justify-between gap-2 mb-2">
+                <div className="min-w-0">
+                  <h3 className="font-semibold text-sm sm:text-base text-foreground leading-snug">{selected.kind === 'area' ? selected.area.name : selected.kind === 'global-city' ? selected.city.name : selected.kind === 'searched' ? selected.city.name : selected.event.title}</h3>
+                  {(selected.kind === 'area' || selected.kind === 'global-city') && <p className="text-xs text-muted-foreground">{selected.kind === 'area' ? `${selected.area.admin1 ? `${selected.area.admin1}, ` : ''}${selected.area.country}` : `${selected.city.admin1 ? `${selected.city.admin1}, ` : ''}${selected.city.country}`}</p>}
+                  {selected.kind === 'searched' && <p className="text-xs text-muted-foreground">{selected.city.admin1 ? `${selected.city.admin1}, ` : ''}{selected.city.country}</p>}
+                </div>
+                {(selected.kind === 'area' || selected.kind === 'global-city') && <RiskBadge level={selected.kind === 'area' ? selected.area.riskLevel : selected.city.riskLevel} showIcon={false} />}
+                <button onClick={() => setSelected(null)} className="text-muted-foreground hover:text-foreground transition-colors shrink-0" aria-label="Close"><X className="w-4 h-4" /></button>
+              </div>
+              {(selected.kind === 'area' || selected.kind === 'global-city' || selected.kind === 'searched') && (
+                <div className="mt-2">
+                  {selectedWeatherLoading ? <div className="flex items-center gap-2 py-3 text-xs text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Loading local weather…</div>
+                    : selectedWeather ? <WeatherSummary weather={selectedWeather} compact />
+                      : <p className="py-2 text-xs text-muted-foreground">{selectedWeatherErrored ? 'Weather details are temporarily unavailable.' : 'Weather details unavailable.'}</p>}
+                  {selected.kind === 'area' && selected.area.latestDischargeM3s !== null && <p className="mt-2 text-xs text-muted-foreground">Nearby river flow: <strong className="text-foreground">{selected.area.latestDischargeM3s.toFixed(1)} m³/s</strong></p>}
+                </div>
+              )}
+              {selected.kind === 'disaster' && <>
+                <div className="flex items-center gap-2 mb-2"><span className="text-xs font-medium px-2 py-0.5 rounded-full text-white" style={{ backgroundColor: disasterColor(selected.event.category) }}>{selected.event.category}</span><span className="text-xs text-foreground/60">{formatDistanceToNow(new Date(selected.event.date), { addSuffix: true })}</span></div>
+                {selected.event.link && <Button size="sm" variant="outline" className="w-full gap-1.5" asChild><a href={selected.event.link} target="_blank" rel="noopener noreferrer">View event report <ExternalLink className="w-3.5 h-3.5" /></a></Button>}
+              </>}
+            </CardContent></Card>
           </div>
         )}
       </div>
 
       <CardContent className="p-3 sm:p-4 bg-muted/40 border-t">
-        <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 sm:gap-x-6 text-xs sm:text-sm">
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-full bg-risk-safe ring-4 ring-risk-safe/15" />
-            <span className="whitespace-nowrap text-muted-foreground">Low <span className="text-foreground/70">(&lt;20mm)</span></span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-full bg-risk-medium ring-4 ring-risk-medium/15" />
-            <span className="whitespace-nowrap text-muted-foreground">Medium <span className="text-foreground/70">(20–50mm)</span></span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-full bg-risk-high ring-4 ring-risk-high/15" />
-            <span className="whitespace-nowrap text-muted-foreground">High <span className="text-foreground/70">(&gt;50mm)</span></span>
-          </div>
-          <div className="w-px h-4 bg-border hidden sm:block" />
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-full" style={{ backgroundColor: disasterColors.Floods }} />
-            <span className="whitespace-nowrap text-muted-foreground">Flood <span className="text-foreground/70">(live)</span></span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-full" style={{ backgroundColor: disasterColors['Severe Storms'] }} />
-            <span className="whitespace-nowrap text-muted-foreground">Storm <span className="text-foreground/70">(live)</span></span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-full bg-yellow-500" />
-            <span className="whitespace-nowrap text-muted-foreground">Searched city</span>
-          </div>
+        <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-xs sm:text-sm">
+          {([['safe', 'Low rain · under 20 mm'], ['medium', 'Rain watch · 20–49 mm'], ['high', 'Heavy rain · 50 mm or more']] as const).map(([risk, label]) => (
+            <div key={risk} className="flex items-center gap-2"><div className="w-3 h-3 rounded-full ring-4" style={{ backgroundColor: riskColors[risk], boxShadow: `0 0 0 4px ${riskColors[risk]}25` }} /><span className="text-muted-foreground">{label}</span></div>
+          ))}
+          <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-purple-500 ring-4 ring-purple-500/15" /><span className="text-muted-foreground">Reported floods and storms</span></div>
         </div>
+        <p className="text-center text-[11px] leading-relaxed text-muted-foreground mt-3">
+          Weather values are estimates · Events are reported · Local area: {regionLabel}.
+        </p>
       </CardContent>
     </Card>
   );
