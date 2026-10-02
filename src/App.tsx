@@ -10,6 +10,12 @@ import DistrictDetail from './pages/DistrictDetail';
 import NotFound from './pages/NotFound';
 
 const ForecastPage = lazy(() => import('./pages/ForecastPage'));
+const CommunityPage = lazy(() => import('./pages/CommunityPage'));
+const ToolsPage = lazy(() => import('./pages/ToolsPage'));
+const HazardsPage = lazy(() => import('./pages/HazardsPage'));
+const AirQualityPage = lazy(() => import('./pages/AirQualityPage'));
+const OceanPage = lazy(() => import('./pages/OceanPage'));
+const HistoryPage = lazy(() => import('./pages/HistoryPage'));
 const queryClient = new QueryClient();
 
 const App = () => (
@@ -22,6 +28,12 @@ const App = () => (
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/forecast" element={<Suspense fallback={<main className="container mx-auto p-8 text-sm text-muted-foreground">Loading forecast…</main>}><ForecastPage /></Suspense>} />
+            <Route path="/community" element={<Suspense fallback={<main className="container mx-auto p-8 text-sm text-muted-foreground">Loading community tools…</main>}><CommunityPage /></Suspense>} />
+            <Route path="/tools" element={<Suspense fallback={<main className="container mx-auto p-8 text-sm text-muted-foreground">Loading map tools…</main>}><ToolsPage /></Suspense>} />
+            <Route path="/hazards" element={<Suspense fallback={<main className="container mx-auto p-8 text-sm text-muted-foreground">Loading hazard layers…</main>}><HazardsPage /></Suspense>} />
+            <Route path="/air-quality" element={<Suspense fallback={<main className="container mx-auto p-8 text-sm text-muted-foreground">Loading air-quality layers…</main>}><AirQualityPage /></Suspense>} />
+            <Route path="/ocean" element={<Suspense fallback={<main className="container mx-auto p-8 text-sm text-muted-foreground">Loading ocean layers…</main>}><OceanPage /></Suspense>} />
+            <Route path="/history" element={<Suspense fallback={<main className="container mx-auto p-8 text-sm text-muted-foreground">Loading weather history…</main>}><HistoryPage /></Suspense>} />
             <Route path="/district/:id" element={<DistrictDetail />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />

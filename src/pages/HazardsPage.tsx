@@ -1,0 +1,41 @@
+import { useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { Activity, ExternalLink, Flame, RefreshCw, TriangleAlert, Waves } from 'lucide-react';
+import { FeaturePageLayout } from '@/components/FeaturePageLayout';
+import { HazardGlobe } from '@/components/HazardGlobe';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { fetchDownwindEstimates, fetchRecentEarthquakes, fetchThermalDetections, type EarthquakePoint } from '@/lib/environmentalLayers';
+
+const HazardsPage = () => {
+  const [window, setWindow] = useState<'hour' | 'day' | 'week'>('day');
+  const [selectedQuake, setSelectedQuake] = useState<EarthquakePoint | null>(null);
+  const quakeQuery = useQuery({ queryKey: ['usgs-earthquakes', window], queryFn: () => fetchRecentEarthquakes(window), staleTime: 5 * 60 * 1000, refetchInterval: 5 * 60 * 1000, retry: 1 });
+  const fireQuery = useQuery({ queryKey: ['nasa-firms-thermal-detections'], queryFn: () => fetchThermalDetections(1), staleTime: 10 * 60 * 1000, refetchInterval: 15 * 60 * 1000, retry: 1 });
+  const fires = useMemo(() => fireQuery.data ?? [], [fireQuery.data]);
+  const windQuery = useQuery({ queryKey: ['thermal-wind-directions', fires.map((fire) => fire.id)], queryFn: () => fetchDownwindEstimates(fires), enabled: fires.length > 0, staleTime: 15 * 60 * 1000, retry: 1 });
+  const earthquakes = quakeQuery.data ?? [];
+  const major = earthquakes.filter((quake) => quake.magnitude >= 4);
+
+  return <FeaturePageLayout eyebrow="Environmental hazards" title="Earthquakes & thermal detections" description="Watch recent earthquake activity and, when the server has a NASA key configured, satellite heat detections. Select an earthquake to inspect its official event record.">
+    <div className="grid gap-5 xl:grid-cols-[minmax(0,1.35fr)_minmax(300px,0.65fr)]">
+      <section className="space-y-3"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-semibold">Live hazard globe</h2><p className="text-sm text-muted-foreground">{earthquakes.length} earthquakes · {fires.length} heat detections</p></div><div className="flex items-center gap-2"><select aria-label="Earthquake time range" className="h-9 rounded-lg border bg-background px-2 text-sm" value={window} onChange={(event) => setWindow(event.target.value as typeof window)}><option value="hour">Past hour</option><option value="day">Past day</option><option value="week">Past week</option></select><Button variant="outline" size="icon" aria-label="Refresh hazard data" onClick={() => { void quakeQuery.refetch(); void fireQuery.refetch(); }} disabled={quakeQuery.isFetching || fireQuery.isFetching}><RefreshCw className={`h-4 w-4 ${quakeQuery.isFetching || fireQuery.isFetching ? 'animate-spin' : ''}`} /></Button></div></div>
+        {quakeQuery.isLoading ? <Card><CardContent className="p-8 text-center text-sm text-muted-foreground">Loading earthquakes…</CardContent></Card> : <HazardGlobe earthquakes={earthquakes} fires={fires} windVectors={windQuery.data} onEarthquakeClick={setSelectedQuake} />}
+        <div className="flex flex-wrap gap-4 text-xs text-muted-foreground"><span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded-full bg-red-500" />Earthquake epicenter</span><span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded-full bg-orange-400" />Satellite heat detection</span><span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded-full border border-red-500" />Epicenter pulse (visual only)</span><span className="flex items-center gap-1.5"><span className="h-0.5 w-4 bg-orange-400" />Simplified wind-direction cue</span></div>
+        {quakeQuery.isError && <p role="alert" className="text-sm text-destructive">Couldn’t load earthquake data. Check your connection and try again.</p>}
+      </section>
+      <aside className="space-y-4"><Card><CardHeader><CardTitle className="flex items-center gap-2 text-base"><Activity className="h-4 w-4 text-red-500" />Earthquake activity</CardTitle><CardDescription>Reported by the US Geological Survey.</CardDescription></CardHeader><CardContent className="space-y-2">
+        {!earthquakes.length ? <p className="text-sm text-muted-foreground">{quakeQuery.isLoading ? 'Loading recent events…' : 'No events in this time window.'}</p> : earthquakes.slice(0, 8).map((quake) => <button type="button" key={quake.id} onClick={() => setSelectedQuake(quake)} className="flex w-full items-center justify-between gap-3 rounded-xl border bg-muted/20 p-3 text-left transition hover:border-primary/40 hover:bg-muted/50"><span className="min-w-0"><span className="block truncate text-sm font-medium">{quake.place}</span><span className="text-xs text-muted-foreground">{new Date(quake.time).toLocaleString()} · {quake.depthKm.toFixed(0)} km deep</span></span><span className="rounded-lg bg-risk-high/10 px-2.5 py-1 font-bold text-risk-high">M{quake.magnitude.toFixed(1)}</span></button>)}
+      </CardContent></Card>
+      {selectedQuake && <Card><CardHeader><CardTitle className="text-base">M{selectedQuake.magnitude.toFixed(1)} · {selectedQuake.place}</CardTitle><CardDescription>{new Date(selectedQuake.time).toLocaleString()}</CardDescription></CardHeader><CardContent className="space-y-2 text-sm"><p>Depth: {selectedQuake.depthKm.toFixed(1)} km</p>{selectedQuake.feltReports !== null && <p>Public felt reports: {selectedQuake.feltReports}</p>}<Button asChild variant="outline" size="sm" className="gap-2"><a href={selectedQuake.url} target="_blank" rel="noopener noreferrer">USGS event details <ExternalLink className="h-3.5 w-3.5" /></a></Button></CardContent></Card>}
+      <Card><CardHeader><CardTitle className="flex items-center gap-2 text-base"><Flame className="h-4 w-4 text-orange-500" />Wildfire &amp; heat detections</CardTitle><CardDescription>NASA satellite thermal scans</CardDescription></CardHeader><CardContent className="space-y-3 text-sm">
+        {fireQuery.isLoading ? <p className="text-muted-foreground">Checking for recent detections…</p> : fireQuery.isError ? <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 text-sm text-muted-foreground">{fireQuery.error instanceof Error ? fireQuery.error.message : 'Heat detections are not available. Configure the FIRMS key on the backend to enable this layer.'}</div> : <p>{fires.length} thermal detections in the latest 24-hour data.</p>}
+        <p className="text-xs leading-relaxed text-muted-foreground">Satellites detect unusually hot surfaces. A dot can be a wildfire, controlled burn, industrial source, or a false detection; it does not confirm a fire on the ground.</p>
+        <p className="text-xs text-muted-foreground">{windQuery.data?.length ? `${windQuery.data.length} simplified wind-direction cues are shown.` : 'Wind arrows are direction-only cues, not smoke-plume vectors, a dispersion forecast, or an air-quality model.'}</p>
+        <a className="inline-flex items-center gap-1 text-xs font-medium text-primary underline-offset-4 hover:underline" href="https://firms.modaps.eosdis.nasa.gov/" target="_blank" rel="noopener noreferrer">NASA FIRMS <ExternalLink className="h-3 w-3" /></a>
+      </CardContent></Card></aside>
+    </div>
+    <Card className="border-amber-500/20"><CardContent className="flex gap-3 p-4 text-sm"><TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" /><div><p className="font-semibold">Tsunami safety</p><p className="mt-1 text-muted-foreground">The USGS event record may include a tsunami-related flag. That flag is not a coastal advisory or an all-clear. We do not draw warning zones here; follow official local emergency messages and <a className="font-medium text-primary underline" href="https://www.tsunami.gov/" target="_blank" rel="noopener noreferrer">NOAA tsunami alerts</a>.</p><p className="mt-1 inline-flex items-center gap-1 text-xs text-muted-foreground"><Waves className="h-3.5 w-3.5" />Epicenter pulse rings are visual markers, not physical shockwave or sea-level simulations.</p></div></CardContent></Card>
+  </FeaturePageLayout>;
+};
+export default HazardsPage;

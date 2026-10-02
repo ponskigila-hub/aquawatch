@@ -1,10 +1,20 @@
 from __future__ import annotations
 
 import os
+import csv
+import io
+import re
+import threading
+from datetime import datetime, timezone
+from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache
+from time import monotonic
+from urllib.error import HTTPError, URLError
+from urllib.parse import quote
+from urllib.request import Request, urlopen
 
 import numpy as np
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
@@ -64,6 +74,180 @@ def make_demo_field(bbox: BoundingBox, width: int, height: int, horizon_hours: i
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok", "service": "aquawatch-forecast"}
+
+
+@app.get("/api/hazards/fires")
+def recent_thermal_detections(days: int = Query(default=1, ge=1, le=5)) -> dict[str, object]:
+    """Proxy the public NASA FIRMS area CSV as GeoJSON without exposing its MAP_KEY."""
+    map_key = os.getenv("NASA_FIRMS_MAP_KEY", "").strip()
+    if not map_key:
+        raise HTTPException(
+            status_code=503,
+            detail="NASA FIRMS is not configured. Set NASA_FIRMS_MAP_KEY in the backend environment.",
+        )
+    source = os.getenv("NASA_FIRMS_SOURCE", "VIIRS_NOAA20_NRT").strip()
+    allowed_sources = {"VIIRS_SNPP_NRT", "VIIRS_NOAA20_NRT", "VIIRS_NOAA21_NRT", "MODIS_NRT"}
+    if source not in allowed_sources:
+        raise HTTPException(status_code=500, detail="NASA_FIRMS_SOURCE must be a supported near-real-time source.")
+
+    # FIRMS places the key in the upstream path; it is only used by this server.
+    url = f"https://firms.modaps.eosdis.nasa.gov/api/area/csv/{map_key}/{source}/world/{days}"
+    request = Request(url, headers={"Accept": "text/csv", "User-Agent": "AquaWatch environmental dashboard"})
+    try:
+        with urlopen(request, timeout=25) as response:
+            csv_text = response.read(12_000_000).decode("utf-8-sig", errors="replace")
+    except HTTPError as exc:
+        # Do not forward the upstream URL or response body because the MAP_KEY is in the URL.
+        status = 503 if exc.code in (401, 403, 429) else 502
+        raise HTTPException(status_code=status, detail="NASA FIRMS could not provide thermal detections right now.") from exc
+    except (URLError, TimeoutError, OSError) as exc:
+        raise HTTPException(status_code=503, detail="NASA FIRMS is temporarily unreachable.") from exc
+
+    try:
+        rows = csv.DictReader(io.StringIO(csv_text))
+        features = []
+        for index, row in enumerate(rows):
+            try:
+                lat, lng = float(row["latitude"]), float(row["longitude"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            if not (-90 <= lat <= 90 and -180 <= lng <= 180):
+                continue
+            properties: dict[str, object] = {
+                key: row.get(key) for key in ("acq_date", "acq_time", "satellite", "confidence")
+            }
+            for source_key, target_key in (("bright_ti4", "bright_ti4"), ("brightness", "brightness"), ("frp", "frp")):
+                try:
+                    properties[target_key] = float(row[source_key])
+                except (KeyError, TypeError, ValueError):
+                    pass
+            stable_id = ":".join(str(row.get(key, "")) for key in ("satellite", "acq_date", "acq_time", "latitude", "longitude"))
+            features.append({
+                "type": "Feature",
+                "id": stable_id or f"firms-{index}",
+                "geometry": {"type": "Point", "coordinates": [lng, lat]},
+                "properties": properties,
+            })
+            if len(features) >= 50_000:
+                break
+    except (csv.Error, UnicodeError) as exc:
+        raise HTTPException(status_code=502, detail="NASA FIRMS returned data in an unexpected format.") from exc
+
+    return {
+        "type": "FeatureCollection",
+        "features": features,
+        "metadata": {
+            "source": "NASA FIRMS",
+            "product": source,
+            "days": days,
+            "retrieved_at": datetime.now(timezone.utc).isoformat(),
+            "url": "https://firms.modaps.eosdis.nasa.gov/",
+        },
+    }
+
+
+_OISST_BASE = "https://www.ncei.noaa.gov/erddap/griddap/ncdc_oisst_v2_avhrr_by_time_zlev_lat_lon"
+_OISST_CACHE: dict[tuple[tuple[float, float], ...], tuple[float, dict[str, object]]] = {}
+_OISST_CACHE_LOCK = threading.Lock()
+
+
+def _oisst_latest_timestamp() -> datetime:
+    request = Request(_OISST_BASE + ".das", headers={"User-Agent": "AquaWatch environmental dashboard"})
+    with urlopen(request, timeout=20) as response:
+        metadata = response.read(1_000_000).decode("utf-8", errors="replace")
+    time_block = metadata.split("time {", 1)[1].split("}", 1)[0]
+    match = re.search(r"actual_range\s+([0-9.eE+\-]+),\s*([0-9.eE+\-]+)", time_block)
+    if not match:
+        raise ValueError("NOAA ERDDAP did not report a time range.")
+    return datetime.fromtimestamp(float(match.group(2)), tz=timezone.utc)
+
+
+def _oisst_grid_coordinate(latitude: float, longitude: float) -> tuple[float, float]:
+    # NOAA OISST v2.1 cell centers are 0.25° apart, offset by 0.125°.
+    lat = -89.875 + round((latitude + 89.875) / 0.25) * 0.25
+    lon_360 = longitude % 360
+    lon = 0.125 + round((lon_360 - 0.125) / 0.25) * 0.25
+    if lon > 359.875:
+        lon -= 360
+    return round(lat, 3), round(lon, 3)
+
+
+def _fetch_oisst_cell(location: tuple[float, float], timestamp: datetime) -> dict[str, object]:
+    latitude, longitude = location
+    grid_lat, grid_lon = _oisst_grid_coordinate(latitude, longitude)
+    time_value = timestamp.strftime("%Y-%m-%dT%H:%M:%SZ")
+    constraint = f"[({time_value})][(0.0)][({grid_lat})][({grid_lon})]"
+    query = f"sst{constraint},anom{constraint}"
+    url = _OISST_BASE + ".csv?" + quote(query, safe="():,.T-Z")
+    request = Request(url, headers={"Accept": "text/csv", "User-Agent": "AquaWatch environmental dashboard"})
+    with urlopen(request, timeout=20) as response:
+        text = response.read(16_000).decode("utf-8", errors="replace")
+    rows = list(csv.reader(io.StringIO(text)))
+    if len(rows) < 3:
+        raise ValueError("NOAA ERDDAP returned no point row.")
+    # ERDDAP CSV includes a units row after its column header.
+    values = dict(zip(rows[0], rows[2]))
+
+    def numeric(name: str) -> float | None:
+        try:
+            value = float(values[name])
+            return value if np.isfinite(value) else None
+        except (KeyError, TypeError, ValueError):
+            return None
+
+    return {
+        "id": f"oisst-{latitude:.3f}-{longitude:.3f}",
+        "latitude": latitude,
+        "longitude": longitude,
+        "sst_c": numeric("sst"),
+        "anomaly_c": numeric("anom"),
+        "grid_latitude": grid_lat,
+        "grid_longitude": grid_lon,
+        "time": values.get("time", time_value),
+    }
+
+
+@app.get("/api/ocean/oisst")
+def ocean_sst_points(points: str = Query(..., min_length=3, max_length=1200)) -> dict[str, object]:
+    """Return sampled NOAA daily SST/anomalies for at most 24 lat,lng locations."""
+    try:
+        locations = []
+        for item in points.split(";"):
+            lat_text, lng_text = item.split(",", 1)
+            latitude, longitude = float(lat_text), float(lng_text)
+            if not (-89.8 <= latitude <= 89.8 and -180 <= longitude <= 180):
+                raise ValueError("Coordinate is outside valid bounds.")
+            locations.append((round(latitude, 3), round(longitude, 3)))
+        if not locations or len(locations) > 24:
+            raise ValueError("Request between 1 and 24 ocean locations.")
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=422, detail="Provide up to 24 locations as `lat,lng;lat,lng` in valid coordinates.")
+
+    cache_key = tuple(locations)
+    cached = _OISST_CACHE.get(cache_key)
+    if cached and cached[0] > monotonic():
+        return cached[1]
+    with _OISST_CACHE_LOCK:
+        cached = _OISST_CACHE.get(cache_key)
+        if cached and cached[0] > monotonic():
+            return cached[1]
+        try:
+            timestamp = _oisst_latest_timestamp()
+            with ThreadPoolExecutor(max_workers=4) as pool:
+                results = list(pool.map(lambda location: _fetch_oisst_cell(location, timestamp), locations))
+        except (HTTPError, URLError, TimeoutError, OSError, ValueError, IndexError) as exc:
+            raise HTTPException(status_code=503, detail="NOAA sea-surface temperature data is temporarily unavailable.") from exc
+        result: dict[str, object] = {
+            "source": "NOAA NCEI OISST v2.1",
+            "time": timestamp.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "anomaly_baseline": "1971–2000",
+            "units": {"sst": "°C", "anomaly": "°C"},
+            "attribution": "NOAA National Centers for Environmental Information",
+            "url": "https://www.ncei.noaa.gov/products/optimum-interpolation-sst",
+            "points": results,
+        }
+        _OISST_CACHE[cache_key] = (monotonic() + 6 * 60 * 60, result)
+        return result
 
 
 @app.post("/api/forecast", response_model=ForecastResponse)

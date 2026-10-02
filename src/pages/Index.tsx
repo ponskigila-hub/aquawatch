@@ -8,6 +8,7 @@ import { DistrictStats } from '@/components/DistrictStats';
 import { StatsOverview } from '@/components/StatsOverview';
 import { InsightsPanel } from '@/components/InsightsPanel';
 import { CurrentWeatherCard } from '@/components/CurrentWeatherCard';
+import { AppNavigation } from '@/components/AppNavigation';
 import type { GlobeSearchKind } from '@/components/GlobeSearch';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { CitySearch } from '@/components/CitySearch';
@@ -73,6 +74,7 @@ const Index = () => {
             </div>
           </div>
         </div>
+        <AppNavigation />
       </header>
 
       <main className="container mx-auto px-4 py-5 sm:py-6 lg:py-8 space-y-6 sm:space-y-8 lg:space-y-10">

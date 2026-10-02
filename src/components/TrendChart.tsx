@@ -17,7 +17,7 @@ interface ReferenceLineConfig {
 }
 
 interface TrendChartProps {
-  data: any[];
+  data: Array<Record<string, unknown> & { date: string }>;
   title: string;
   description: string;
   dataKey: string;
@@ -27,17 +27,25 @@ interface TrendChartProps {
   referenceLines?: ReferenceLineConfig[];
 }
 
-const CustomTooltip = ({ active, payload, label, dataKey, tooltipLabel, chartColor }: any) => {
+interface CustomTooltipProps {
+  active?: boolean;
+  payload?: Array<{ value?: unknown }>;
+  label?: string | number;
+  tooltipLabel: string;
+  chartColor: string;
+}
+
+const CustomTooltip = ({ active, payload, label, tooltipLabel, chartColor }: CustomTooltipProps) => {
   if (!active || !payload?.length) return null;
 
   return (
     <div className="rounded-lg border bg-card/95 backdrop-blur-sm px-3 py-2 shadow-lg text-xs sm:text-sm">
       <p className="text-muted-foreground mb-1">
-        {new Date(label).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+        {new Date(String(label ?? '')).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
       </p>
       <p className="font-semibold flex items-center gap-1.5">
         <span className="w-2 h-2 rounded-full" style={{ backgroundColor: chartColor }} />
-        {payload[0].value}
+        {typeof payload[0].value === 'number' || typeof payload[0].value === 'string' ? payload[0].value : '—'}
         {tooltipLabel}
       </p>
     </div>
@@ -90,7 +98,7 @@ export const TrendChart = ({
               width={44}
             />
             <Tooltip
-              content={<CustomTooltip dataKey={dataKey} tooltipLabel={tooltipLabel} chartColor={chartColor} />}
+              content={<CustomTooltip tooltipLabel={tooltipLabel} chartColor={chartColor} />}
             />
             {referenceLines.map((line, index) => (
               <ReferenceLine

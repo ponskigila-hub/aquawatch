@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { CitySearch } from '@/components/CitySearch';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { AppNavigation } from '@/components/AppNavigation';
 import { WeatherSummary } from '@/components/WeatherSummary';
 import { useRegionalOutlook } from '@/hooks/useRegionalOutlook';
 import { getRegionLabel } from '@/lib/globalWeather';
@@ -73,6 +74,7 @@ const ForecastPage = () => {
           </div>
           <div className="flex items-center gap-2"><Button variant="outline" size="sm" asChild><Link to="/" className="gap-1.5"><ArrowLeft className="h-4 w-4" /><span className="hidden sm:inline">Dashboard</span><span className="sm:hidden">Back</span></Link></Button><ThemeToggle /></div>
         </div>
+        <AppNavigation />
       </header>
 
       <main className="container mx-auto space-y-5 px-4 py-5 sm:space-y-7 sm:py-8">
