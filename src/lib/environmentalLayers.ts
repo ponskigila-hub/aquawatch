@@ -32,11 +32,24 @@ export interface MarinePoint {
   lat: number;
   lng: number;
   waveHeightM: number | null;
+  waveDirectionDeg: number | null;
   swellHeightM: number | null;
+  swellDirectionDeg: number | null;
   wavePeriodS: number | null;
   currentKmh: number | null;
   currentDirectionDeg: number | null;
   time: string | null;
+  forecast: MarineHour[];
+}
+export interface MarineHour {
+  time: string;
+  waveHeightM: number | null;
+  waveDirectionDeg: number | null;
+  swellHeightM: number | null;
+  swellDirectionDeg: number | null;
+  wavePeriodS: number | null;
+  currentKmh: number | null;
+  currentDirectionDeg: number | null;
 }
 export interface OisstPoint {
   id: string;
@@ -103,34 +116,96 @@ export async function fetchGlobalAirQuality(): Promise<AirQualityPoint[]> {
   });
 }
 
-const oceanPoints = [
-  { name: 'North Pacific', lat: 35, lng: -150 }, { name: 'Equatorial Pacific', lat: 0, lng: -140 },
-  { name: 'South Pacific', lat: -35, lng: -120 }, { name: 'North Atlantic', lat: 35, lng: -45 },
-  { name: 'South Atlantic', lat: -25, lng: -15 }, { name: 'Indian Ocean', lat: -20, lng: 80 },
-  { name: 'Arabian Sea', lat: 15, lng: 65 }, { name: 'Bay of Bengal', lat: 12, lng: 88 },
-  { name: 'South China Sea', lat: 12, lng: 115 }, { name: 'Coral Sea', lat: -18, lng: 155 },
-  { name: 'Southern Ocean', lat: -55, lng: 30 }, { name: 'North Sea', lat: 56, lng: 3 },
+const oceanNames = [
+  'North Pacific', 'Equatorial Pacific', 'South Pacific', 'North Atlantic', 'South Atlantic',
+  'Indian Ocean', 'Arabian Sea', 'Bay of Bengal', 'South China Sea', 'Coral Sea',
+  'Southern Ocean', 'North Sea',
 ];
+const marineCoordinates: Array<[number, number]> = [
+  [35, -150], [0, -140], [-35, -120], [35, -45], [-25, -15], [-20, 80], [15, 65], [12, 88], [12, 115], [-18, 155], [-55, 30], [56, 3],
+  [45, -170], [25, -170], [10, -170], [-10, -170], [-30, -160], [-45, -150],
+  [45, -130], [25, -130], [10, -130], [-10, -130], [-30, -130], [-50, -130],
+  [50, -50], [30, -50], [10, -50], [-10, -45], [-30, -35], [-50, -25],
+  [50, -30], [30, -30], [10, -30], [-10, -30], [-30, -20], [-50, -20],
+  [20, 45], [5, 45], [-10, 45], [-25, 45], [-40, 45],
+  [20, 60], [5, 60], [-10, 60], [-25, 60], [-40, 60],
+  [15, 100], [0, 100], [-15, 100], [-30, 100], [-45, 100],
+  [-55, -100], [-55, -30], [-55, 40], [-55, 110],
+];
+
+const oceanPoints = marineCoordinates.map(([lat, lng], index) => ({
+  lat,
+  lng,
+  name: oceanNames[index] ?? `${lng < -90 || lng > 120 ? 'Pacific' : lng < 0 ? 'Atlantic' : 'Indian'} Ocean · ${Math.abs(lat)}°${lat >= 0 ? 'N' : 'S'}, ${Math.abs(lng)}°${lng >= 0 ? 'E' : 'W'}`,
+}));
+
+const marineHourlyVariables = 'wave_height,wave_direction,swell_wave_height,swell_wave_direction,wave_period,ocean_current_velocity,ocean_current_direction';
+
+function parseMarineRow(row: Record<string, unknown>, point: { name: string; lat: number; lng: number }, index: number): MarinePoint {
+  const hourly = typeof row.hourly === 'object' && row.hourly !== null ? row.hourly as Record<string, unknown> : {};
+  const times = Array.isArray(hourly.time) ? hourly.time.filter((time): time is string => typeof time === 'string') : [];
+  const forecast: MarineHour[] = times.map((time, hour) => ({
+    time,
+    waveHeightM: numberAt(hourly, 'wave_height', hour),
+    waveDirectionDeg: numberAt(hourly, 'wave_direction', hour),
+    swellHeightM: numberAt(hourly, 'swell_wave_height', hour),
+    swellDirectionDeg: numberAt(hourly, 'swell_wave_direction', hour),
+    wavePeriodS: numberAt(hourly, 'wave_period', hour),
+    currentKmh: numberAt(hourly, 'ocean_current_velocity', hour),
+    currentDirectionDeg: numberAt(hourly, 'ocean_current_direction', hour),
+  }));
+  const first = forecast[0];
+  return {
+    id: `ocean-${index}`,
+    name: point.name,
+    lat: asNumber(row.latitude) ?? point.lat,
+    lng: asNumber(row.longitude) ?? point.lng,
+    waveHeightM: first?.waveHeightM ?? null,
+    waveDirectionDeg: first?.waveDirectionDeg ?? null,
+    swellHeightM: first?.swellHeightM ?? null,
+    swellDirectionDeg: first?.swellDirectionDeg ?? null,
+    wavePeriodS: first?.wavePeriodS ?? null,
+    currentKmh: first?.currentKmh ?? null,
+    currentDirectionDeg: first?.currentDirectionDeg ?? null,
+    time: first?.time ?? null,
+    forecast,
+  };
+}
 
 export async function fetchGlobalMarineConditions(): Promise<MarinePoint[]> {
   const params = new URLSearchParams({
     latitude: oceanPoints.map((point) => point.lat).join(','),
     longitude: oceanPoints.map((point) => point.lng).join(','),
-    hourly: 'wave_height,swell_wave_height,wave_period,ocean_current_velocity,ocean_current_direction',
-    forecast_hours: '2', timezone: 'UTC',
+    hourly: marineHourlyVariables,
+    forecast_hours: '169', timezone: 'UTC', cell_selection: 'sea',
   });
   const payload = parseMulti(await fetchJson(`https://marine-api.open-meteo.com/v1/marine?${params}`));
   if (!payload.length) throw new Error('Ocean conditions are temporarily unavailable.');
   return payload.map((row, index) => {
-    const point = oceanPoints[index];
-    const hourly = typeof row.hourly === 'object' && row.hourly !== null ? row.hourly as Record<string, unknown> : {};
-    const times = hourly.time;
-    return { id: `ocean-${index}`, name: point?.name ?? 'Ocean point', lat: asNumber(row.latitude) ?? point.lat, lng: asNumber(row.longitude) ?? point.lng, waveHeightM: numberAt(hourly, 'wave_height'), swellHeightM: numberAt(hourly, 'swell_wave_height'), wavePeriodS: numberAt(hourly, 'wave_period'), currentKmh: numberAt(hourly, 'ocean_current_velocity'), currentDirectionDeg: numberAt(hourly, 'ocean_current_direction'), time: Array.isArray(times) && typeof times[0] === 'string' ? times[0] : null };
+    const latitude = asNumber(row.latitude);
+    const longitude = asNumber(row.longitude);
+    const matchedIndex = latitude === null || longitude === null ? -1 : oceanPoints.findIndex((point) => Math.abs(point.lat - latitude) < 0.01 && Math.abs(point.lng - longitude) < 0.01);
+    const sourceIndex = matchedIndex >= 0 ? matchedIndex : index;
+    const point = oceanPoints[sourceIndex] ?? { name: `Ocean point ${index + 1}`, lat: latitude ?? 0, lng: longitude ?? 0 };
+    return parseMarineRow(row, point, sourceIndex);
   });
 }
 
+export async function fetchMarinePointForecast(lat: number, lng: number, name = 'Pinned location'): Promise<MarinePoint> {
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat < -89.8 || lat > 89.8 || lng < -180 || lng > 180) {
+    throw new Error('Enter a valid latitude and longitude.');
+  }
+  const params = new URLSearchParams({
+    latitude: String(lat), longitude: String(lng), hourly: marineHourlyVariables,
+    forecast_hours: '169', timezone: 'UTC', cell_selection: 'sea',
+  });
+  const payload = parseMulti(await fetchJson(`https://marine-api.open-meteo.com/v1/marine?${params}`));
+  if (!payload[0]) throw new Error('Marine forecast is unavailable for this location.');
+  return { ...parseMarineRow(payload[0], { name, lat, lng }, 0), id: 'ocean-pinned' };
+}
+
 export async function fetchGlobalOisstPoints(): Promise<OisstPoint[]> {
-  const params = new URLSearchParams({ points: oceanPoints.map((point) => `${point.lat},${point.lng}`).join(';') });
+  const params = new URLSearchParams({ points: oceanPoints.slice(0, 24).map((point) => `${point.lat},${point.lng}`).join(';') });
   const payload = await fetchJson(`/api/ocean/oisst?${params}`) as { points?: Array<Record<string, unknown>> };
   return (payload.points ?? []).map((row, index) => ({
     id: `ocean-${index}`,
@@ -140,6 +215,21 @@ export async function fetchGlobalOisstPoints(): Promise<OisstPoint[]> {
     anomalyC: asNumber(row.anomaly_c),
     time: typeof row.time === 'string' ? row.time : null,
   }));
+}
+
+export async function fetchOisstAt(lat: number, lng: number): Promise<OisstPoint | null> {
+  const params = new URLSearchParams({ points: `${lat},${lng}` });
+  const payload = await fetchJson(`/api/ocean/oisst?${params}`) as { points?: Array<Record<string, unknown>> };
+  const row = payload.points?.[0];
+  if (!row) return null;
+  return {
+    id: `oisst-${lat.toFixed(3)}-${lng.toFixed(3)}`,
+    lat: asNumber(row.latitude) ?? lat,
+    lng: asNumber(row.longitude) ?? lng,
+    seaSurfaceC: asNumber(row.sst_c),
+    anomalyC: asNumber(row.anomaly_c),
+    time: typeof row.time === 'string' ? row.time : null,
+  };
 }
 
 export async function fetchHistoricalDailyWeather(lat: number, lng: number, startDate: string, endDate: string): Promise<DailyHistoricalWeather[]> {

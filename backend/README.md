@@ -34,7 +34,8 @@ Run the API tests with `python -m pip install -r requirements-dev.txt && pytest`
 - `GET /docs` — interactive OpenAPI docs
 - `POST /api/forecast` — inference
 - `GET /api/hazards/fires?days=1` — global NASA FIRMS thermal detections as GeoJSON; `days` is limited to 1–5
-- `GET /api/ocean/oisst?points=lat,lng;lat,lng` — up to 24 sampled NOAA OISST v2.1 SST/anomaly locations; caches by point set for six hours and reports the latest timestamp in NOAA ERDDAP metadata
+- `GET /api/ocean/oisst?points=lat,lng;lat,lng` — up to 24 sampled NOAA NCEI OISST v2.1 near-real-time SST/anomaly locations; caches by point set for six hours and reports the source timestamp
+- `GET /api/ocean/oisst/raster?metric=sst|anomaly` — global daily 0.25° NOAA grid as a transparent Web-Mercator PNG; the six-hour cached response includes `X-Data-Time` and `X-Data-Source` headers
 
 Example:
 
@@ -48,6 +49,6 @@ Pass `spatial_data` as an `H x W` numeric matrix matching `grid_height` and `gri
 
 FIRMS values are satellite thermal detections, not confirmed ground fires. Some dots may reflect controlled burns, industrial heat sources, or false detections. The endpoint uses a backend proxy so the FIRMS key is never sent to the browser; it is unavailable until a valid key is configured. See the [NASA FIRMS API terms and docs](https://firms.modaps.eosdis.nasa.gov/api/area/).
 
-OISST values are samples from NOAA's daily 0.25° gridded analysis, not buoy readings or an instantaneous sensor stream. The anomaly uses the product's 1971–2000 reference. The API reads the latest timestamp from ERDDAP metadata and labels the actual data date; upstream availability may lag or be temporarily unavailable. Source: [NOAA NCEI OISST](https://www.ncei.noaa.gov/products/optimum-interpolation-sst).
+OISST values are samples from NOAA's daily 0.25° gridded analysis, not buoy readings or an instantaneous sensor stream. The API uses the NOAA NCEI preliminary near-real-time OISST v2.1 ERDDAP stream (`ncdcOisst21NrtAgg_LonPM180`) and labels the actual source timestamp; the preliminary stream is typically available about a day after analysis and is replaced by the final product after roughly two weeks. The anomaly uses the product's 1971–2000 reference. Source: [NOAA NCEI OISST](https://www.ncei.noaa.gov/products/optimum-interpolation-sst) and [NOAA CoastWatch ERDDAP dataset](https://coastwatch.pfeg.noaa.gov/erddap/griddap/ncdcOisst21NrtAgg_LonPM180.html).
 
 For actual forecasting, fine-tune the same `ResNet18Heatmap` architecture on properly aligned, time-labelled gridded weather data, save its full model `state_dict`, then set `AQUAWATCH_MODEL_CHECKPOINT` to that file. Validate calibration, baselines, geographic generalization, and lead-time skill before using operationally.

@@ -4,17 +4,19 @@ import os
 import csv
 import io
 import re
+import struct
 import threading
 from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache
 from time import monotonic
+import zlib
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
 
 import numpy as np
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Response
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
@@ -146,7 +148,7 @@ def recent_thermal_detections(days: int = Query(default=1, ge=1, le=5)) -> dict[
     }
 
 
-_OISST_BASE = "https://www.ncei.noaa.gov/erddap/griddap/ncdc_oisst_v2_avhrr_by_time_zlev_lat_lon"
+_OISST_BASE = "https://coastwatch.pfeg.noaa.gov/erddap/griddap/ncdcOisst21NrtAgg_LonPM180"
 _OISST_CACHE: dict[tuple[tuple[float, float], ...], tuple[float, dict[str, object]]] = {}
 _OISST_CACHE_LOCK = threading.Lock()
 
@@ -154,21 +156,20 @@ _OISST_CACHE_LOCK = threading.Lock()
 def _oisst_latest_timestamp() -> datetime:
     request = Request(_OISST_BASE + ".das", headers={"User-Agent": "AquaWatch environmental dashboard"})
     with urlopen(request, timeout=20) as response:
-        metadata = response.read(1_000_000).decode("utf-8", errors="replace")
-    time_block = metadata.split("time {", 1)[1].split("}", 1)[0]
-    match = re.search(r"actual_range\s+([0-9.eE+\-]+),\s*([0-9.eE+\-]+)", time_block)
+        metadata = response.read(1_000_000).decode("latin-1", errors="replace")
+    match = re.search(r'time_coverage_end\s+"([^"]+)"', metadata)
     if not match:
         raise ValueError("NOAA ERDDAP did not report a time range.")
-    return datetime.fromtimestamp(float(match.group(2)), tz=timezone.utc)
+    return datetime.fromisoformat(match.group(1).replace("Z", "+00:00")).astimezone(timezone.utc)
 
 
 def _oisst_grid_coordinate(latitude: float, longitude: float) -> tuple[float, float]:
-    # NOAA OISST v2.1 cell centers are 0.25° apart, offset by 0.125°.
+    # The near-real-time global ERDDAP grid is on cell centers at 0.125°
+    # through 179.875° east and -179.875° through 179.875° west.
     lat = -89.875 + round((latitude + 89.875) / 0.25) * 0.25
-    lon_360 = longitude % 360
-    lon = 0.125 + round((lon_360 - 0.125) / 0.25) * 0.25
-    if lon > 359.875:
-        lon -= 360
+    normalized_longitude = ((longitude + 180) % 360) - 180
+    longitude_index = max(0, min(1439, round((normalized_longitude + 179.875) / 0.25)))
+    lon = -179.875 + longitude_index * 0.25
     return round(lat, 3), round(lon, 3)
 
 
@@ -238,7 +239,7 @@ def ocean_sst_points(points: str = Query(..., min_length=3, max_length=1200)) ->
         except (HTTPError, URLError, TimeoutError, OSError, ValueError, IndexError) as exc:
             raise HTTPException(status_code=503, detail="NOAA sea-surface temperature data is temporarily unavailable.") from exc
         result: dict[str, object] = {
-            "source": "NOAA NCEI OISST v2.1",
+            "source": "NOAA NCEI OISST v2.1 near-real-time analysis",
             "time": timestamp.strftime("%Y-%m-%dT%H:%M:%SZ"),
             "anomaly_baseline": "1971–2000",
             "units": {"sst": "°C", "anomaly": "°C"},
@@ -248,6 +249,120 @@ def ocean_sst_points(points: str = Query(..., min_length=3, max_length=1200)) ->
         }
         _OISST_CACHE[cache_key] = (monotonic() + 6 * 60 * 60, result)
         return result
+
+
+_OISST_RASTER_CACHE: dict[str, tuple[float, str, bytes]] = {}
+_OISST_RASTER_LOCK = threading.Lock()
+_OISST_GRID_SHAPE = (720, 1440)
+
+
+def _fetch_oisst_grid(variable: str, timestamp: datetime) -> np.ndarray:
+    """Read the NOAA daily 0.25° field as a north-to-south-ready numeric grid."""
+    if variable not in {"sst", "anom"}:
+        raise ValueError("Unsupported NOAA OISST variable.")
+    time_value = timestamp.strftime("%Y-%m-%dT%H:%M:%SZ")
+    query = f"{variable}[({time_value})][(0.0)][(-89.875):(89.875)][(-179.875):(179.875)]"
+    request = Request(
+        _OISST_BASE + ".csv?" + quote(query, safe="():,.T-Z"),
+        headers={"Accept": "text/csv", "User-Agent": "AquaWatch environmental dashboard"},
+    )
+    grid = np.full(_OISST_GRID_SHAPE, np.nan, dtype=np.float32)
+    with urlopen(request, timeout=90) as response:
+        rows = csv.reader(io.TextIOWrapper(response, encoding="utf-8-sig", newline=""))
+        next(rows, None)  # ERDDAP column headings
+        next(rows, None)  # units row
+        populated = 0
+        for row in rows:
+            if len(row) < 5:
+                continue
+            try:
+                latitude, longitude, value = float(row[2]), float(row[3]), float(row[4])
+            except (TypeError, ValueError):
+                continue
+            lat_index = round((latitude + 89.875) / 0.25)
+            lon_index = round((longitude + 179.875) / 0.25)
+            if 0 <= lat_index < 720 and 0 <= lon_index < 1440 and np.isfinite(value):
+                grid[lat_index, lon_index] = value
+                populated += 1
+    if populated < 10_000:
+        raise ValueError("NOAA OISST raster response contained too few valid grid cells.")
+    return grid
+
+
+def _png_chunk(kind: bytes, data: bytes) -> bytes:
+    body = kind + data
+    return struct.pack(">I", len(data)) + body + struct.pack(">I", zlib.crc32(body) & 0xFFFFFFFF)
+
+
+def _oisst_png(grid: np.ndarray, metric: str) -> bytes:
+    """Color a NOAA grid into a transparent RGBA PNG suitable for Leaflet ImageOverlay."""
+    if metric == "anomaly":
+        low, high = -3.0, 3.0
+        stops = [(-3, "55C1FF"), (-1.5, "5887FF"), (0, "A682FF"), (1, "F8D252"), (2, "F28C44"), (3, "DC4256")]
+    else:
+        low, high = 0.0, 32.0
+        stops = [(0, "102E4A"), (8, "5887FF"), (16, "55C1FF"), (24, "F8D252"), (28, "F28C44"), (32, "DC4256")]
+    # NOAA's coordinates run south-to-north across -180–180°. Resample
+    # latitude rows into Web Mercator for alignment with the Leaflet basemap.
+    height, width = _OISST_GRID_SHAPE
+    mercator_y = np.pi * (1 - 2 * (np.arange(height, dtype=np.float32) + 0.5) / height)
+    latitude = np.arctan(np.sinh(mercator_y)) * (180 / np.pi)
+    latitude_indices = np.rint((latitude + 89.875) / 0.25).astype(np.int32)
+    latitude_indices = np.clip(latitude_indices, 0, grid.shape[0] - 1)
+    values = grid[latitude_indices, :]
+    valid = np.isfinite(values)
+    if metric == "anomaly":
+        valid &= np.abs(values) <= 20.0
+    else:
+        valid &= (values >= -3.0) & (values <= 45.0)
+    positions = np.asarray([item[0] for item in stops], dtype=np.float32)
+    colours = np.asarray([[int(item[1][index:index + 2], 16) for index in (0, 2, 4)] for item in stops], dtype=np.float32)
+    sample = np.clip(np.nan_to_num(values, nan=low), low, high)
+    pixels = np.zeros((*values.shape, 4), dtype=np.uint8)
+    for channel in range(3):
+        pixels[..., channel] = np.interp(sample, positions, colours[:, channel]).astype(np.uint8)
+    pixels[..., 3] = np.where(valid, 220, 0).astype(np.uint8)
+    raw = bytearray()
+    for row in pixels:
+        raw.append(0)  # PNG filter: none
+        raw.extend(row.tobytes())
+    header = struct.pack(">IIBBBBB", width, height, 8, 6, 0, 0, 0)
+    return b"\x89PNG\r\n\x1a\n" + _png_chunk(b"IHDR", header) + _png_chunk(b"IDAT", zlib.compress(bytes(raw), 6)) + _png_chunk(b"IEND", b"")
+
+
+@app.get("/api/ocean/oisst/raster")
+def ocean_sst_raster(metric: str = Query(default="anomaly")) -> Response:
+    """Return a daily NOAA OISST global raster as a transparent PNG map overlay."""
+    if metric not in {"sst", "anomaly"}:
+        raise HTTPException(status_code=422, detail="Choose metric=sst or metric=anomaly.")
+    cached = _OISST_RASTER_CACHE.get(metric)
+    if cached and cached[0] > monotonic():
+        expiry, data_time, image = cached
+    else:
+        with _OISST_RASTER_LOCK:
+            cached = _OISST_RASTER_CACHE.get(metric)
+            if cached and cached[0] > monotonic():
+                expiry, data_time, image = cached
+            else:
+                try:
+                    timestamp = _oisst_latest_timestamp()
+                    variable = "anom" if metric == "anomaly" else "sst"
+                    image = _oisst_png(_fetch_oisst_grid(variable, timestamp), metric)
+                except (HTTPError, URLError, TimeoutError, OSError, ValueError, IndexError) as exc:
+                    raise HTTPException(status_code=503, detail="NOAA's global sea-surface raster is temporarily unavailable.") from exc
+                data_time = timestamp.strftime("%Y-%m-%dT%H:%M:%SZ")
+                expiry = monotonic() + 6 * 60 * 60
+                _OISST_RASTER_CACHE[metric] = (expiry, data_time, image)
+    return Response(
+        content=image,
+        media_type="image/png",
+        headers={
+            "Cache-Control": "public, max-age=21600",
+            "X-Data-Time": data_time,
+            "X-Data-Source": "NOAA NCEI OISST v2.1 near-real-time analysis",
+            "X-Data-Metric": metric,
+        },
+    )
 
 
 @app.post("/api/forecast", response_model=ForecastResponse)

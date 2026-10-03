@@ -149,9 +149,9 @@ export const RiskGlobe = ({ searchedCity, searchedIsCountry = false, regionWeath
 
   return (
     <Card className="weather-panel overflow-hidden rounded-2xl">
-      <div ref={containerRef} className="relative w-full bg-[#0a1128]" style={{ height: dimensions.height }}>
+      <div ref={containerRef} className="relative w-full bg-[#102E4A]" style={{ height: dimensions.height }}>
         {!ready && (
-          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-[#0a1128] text-white/70">
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-[#102E4A] text-white/70">
             <Loader2 className="w-6 h-6 animate-spin" /><p className="text-xs">Loading globe…</p>
           </div>
         )}
@@ -159,10 +159,10 @@ export const RiskGlobe = ({ searchedCity, searchedIsCountry = false, regionWeath
           ref={globeRef}
           width={dimensions.width}
           height={dimensions.height}
-          backgroundColor="#0a1128"
+          backgroundColor="#102E4A"
           globeImageUrl="/globe/earth-day.jpg"
           bumpImageUrl="/globe/earth-topology.png"
-          atmosphereColor="#7dd3fc"
+          atmosphereColor="#55C1FF"
           atmosphereAltitude={0.28}
           onGlobeReady={() => setReady(true)}
           onZoom={handleZoom}
