@@ -4,9 +4,8 @@ import type { CitySearchResult } from '@/lib/openMeteo';
 
 export function useRegionalOutlook(city?: CitySearchResult | null) {
   const locations = getRegionalLocations(city);
-  const regionKey = city && !(city.name.toLowerCase() === 'jakarta' && city.country.toLowerCase() === 'indonesia')
-    ? `city-${city.id}`
-    : 'jakarta';
+  const isJakarta = city?.name.toLowerCase() === 'jakarta' && city.country.toLowerCase() === 'indonesia';
+  const regionKey = city && !isJakarta ? `city-${city.id}-${city.lat.toFixed(3)}-${city.lng.toFixed(3)}` : 'jakarta';
 
   return useQuery({
     queryKey: ['regional-weather-outlook', regionKey],

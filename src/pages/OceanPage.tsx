@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, Anchor, ArrowDownToLine, Compass, Globe2, Map, MapPin, RefreshCw, Thermometer, Timer, Waves } from 'lucide-react';
 import { FeaturePageLayout } from '@/components/FeaturePageLayout';
@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input';
 import { fetchGlobalMarineConditions, fetchMarinePointForecast, fetchOisstAt, type MarinePoint, type OisstPoint } from '@/lib/environmentalLayers';
 import { buildMarineHeatmap, buildOceanFlowPaths, type MarineVisualMetric } from '@/lib/marineVisuals';
 import type { CitySearchResult } from '@/lib/openMeteo';
+import { useUserLocation } from '@/hooks/useUserLocation';
 
 type OceanMetric = 'waveHeightM' | 'swellHeightM' | 'currentKmh' | 'seaSurfaceC' | 'anomalyC';
 type OceanPoint = MarinePoint & Pick<OisstPoint, 'seaSurfaceC' | 'anomalyC'> & { sstTime: string | null };
@@ -123,11 +124,14 @@ function downloadFile(name: string, content: string, mime: string) {
 }
 
 const OceanPage = () => {
+  const { location: userPosition } = useUserLocation();
+  const userLat = userPosition?.lat;
+  const userLng = userPosition?.lng;
   const [metric, setMetric] = useState<OceanMetric>('waveHeightM');
   const [mapMode, setMapMode] = useState<MapMode>('2d');
   const [forecastHour, setForecastHour] = useState(0);
   const [location, setLocation] = useState<LocationChoice | null>(null);
-  const [mapCenter, setMapCenter] = useState({ lat: 15, lng: 0 });
+  const [mapCenter, setMapCenter] = useState({ lat: -6.2088, lng: 106.8456 });
   const [latitudeInput, setLatitudeInput] = useState('');
   const [longitudeInput, setLongitudeInput] = useState('');
 
@@ -137,7 +141,23 @@ const OceanPage = () => {
   const oceanData = useMemo<OceanPoint[]>(() => marineData.map((point) => {
     return { ...point, seaSurfaceC: null, anomalyC: null, sstTime: null };
   }), [marineData]);
-  const selectedChoice = useMemo(() => location ?? (oceanData[0] ? { id: oceanData[0].id, name: oceanData[0].name, lat: oceanData[0].lat, lng: oceanData[0].lng } : null), [location, oceanData]);
+  useEffect(() => {
+    if (!location && userLat !== undefined && userLng !== undefined) setMapCenter({ lat: userLat, lng: userLng });
+  }, [location, userLat, userLng]);
+
+  const selectedChoice = useMemo(() => {
+    if (location) return location;
+    if (!oceanData.length) return null;
+    if (userLat === undefined || userLng === undefined) return { id: oceanData[0].id, name: oceanData[0].name, lat: oceanData[0].lat, lng: oceanData[0].lng };
+    const nearest = oceanData.reduce((best, point) => {
+      const distance = (candidate: OceanPoint) => {
+        const longitudeDelta = ((candidate.lng - userLng + 540) % 360) - 180;
+        return (candidate.lat - userLat) ** 2 + (longitudeDelta * Math.cos(userLat * Math.PI / 180)) ** 2;
+      };
+      return distance(point) < distance(best) ? point : best;
+    });
+    return { id: nearest.id, name: nearest.name, lat: nearest.lat, lng: nearest.lng };
+  }, [location, oceanData, userLat, userLng]);
   const selectedGridPoint = selectedChoice ? oceanData.find((point) => point.id === selectedChoice.id) ?? null : null;
   const extraQuery = useQuery({
     queryKey: ['ocean-selected-detail', selectedChoice?.id, selectedChoice?.lat, selectedChoice?.lng],
@@ -229,14 +249,15 @@ const OceanPage = () => {
   const currentTrend = selectedOcean ? selectedOcean.forecast.filter((_, index) => index % 6 === 0).map((hour) => hour.currentKmh) : [];
 
   const exportRows = useMemo(() => {
-    if (!location) return oceanData;
+    const exportCenter = location ?? (userLat !== undefined && userLng !== undefined ? { lat: userLat, lng: userLng } : null);
+    if (!exportCenter) return oceanData;
     const nearby = oceanData.filter((point) => {
-      const longitudeDelta = Math.abs(((point.lng - location.lng + 540) % 360) - 180);
-      return Math.abs(point.lat - location.lat) <= 30 && longitudeDelta <= 30;
+      const longitudeDelta = Math.abs(((point.lng - exportCenter.lng + 540) % 360) - 180);
+      return Math.abs(point.lat - exportCenter.lat) <= 30 && longitudeDelta <= 30;
     });
     if (selectedOcean && !nearby.some((point) => point.id === selectedOcean.id)) nearby.push(selectedOcean);
     return nearby.length ? nearby : selectedOcean ? [selectedOcean] : oceanData;
-  }, [location, oceanData, selectedOcean]);
+  }, [location, oceanData, selectedOcean, userLat, userLng]);
 
   const exportData = (format: 'geojson' | 'csv') => {
     const rows = exportSnapshot(exportRows, forecastHour);
@@ -272,8 +293,8 @@ const OceanPage = () => {
 
   const marineRegion = oceanData.slice(0, 12);
   const mapView = mapMode === '2d'
-    ? <EnvironmentalMap points={mapPoints} paths={flowPaths} rasterUrl={rasterUrl} rasterOpacity={0.78} height={500} center={mapCenter} zoom={location ? 4.5 : 2} onMapClick={handleMapPin} onPointClick={handleMarkerClick} emptyLabel="No marine data is available right now." />
-    : <OceanGlobe points={mapPoints} paths={flowPaths} center={location ?? selectedChoice ?? mapCenter} zoomed={Boolean(location)} onPointClick={handleMarkerClick} onGlobeClick={handleMapPin} />;
+    ? <EnvironmentalMap points={mapPoints} paths={flowPaths} rasterUrl={rasterUrl} rasterOpacity={0.78} height={500} center={mapCenter} zoom={location || userPosition ? 4.5 : 2} onMapClick={handleMapPin} onPointClick={handleMarkerClick} emptyLabel="No marine data is available right now." />
+    : <OceanGlobe points={mapPoints} paths={flowPaths} center={location ?? userPosition ?? selectedChoice ?? mapCenter} zoomed={Boolean(location)} onPointClick={handleMarkerClick} onGlobeClick={handleMapPin} />;
 
   return <FeaturePageLayout eyebrow="Marine & ocean" title="Ocean conditions" description="Explore global marine forecasts beside NOAA’s daily gridded sea-surface temperature analysis.">
     <div className="grid gap-5 xl:grid-cols-[minmax(0,1.35fr)_minmax(310px,0.65fr)]">
@@ -353,7 +374,7 @@ const OceanPage = () => {
 
           <div className="space-y-2 border-t pt-3">
             <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground"><ArrowDownToLine className="h-3.5 w-3.5" />Export region data</div>
-            <p className="text-[11px] text-muted-foreground">{location ? `${exportRows.length} nearby sample locations around the selected point.` : `${exportRows.length} global marine sample locations.`}</p>
+            <p className="text-[11px] text-muted-foreground">{location || userPosition ? `${exportRows.length} nearby sample locations around ${location ? 'the selected point' : 'your position'}.` : `${exportRows.length} global marine sample locations.`}</p>
             <div className="grid grid-cols-2 gap-2"><Button variant="outline" size="sm" onClick={() => exportData('geojson')}>Download GeoJSON</Button><Button variant="outline" size="sm" onClick={() => exportData('csv')}>Download CSV</Button></div>
           </div>
         </CardContent></Card>

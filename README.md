@@ -31,6 +31,10 @@ Additional sources, fields, update timing, and known limitations are documented 
 - Community pins remain on the current device/browser. They are unverified and are not transmitted to a central alert service.
 - AquaWatch is for general awareness and research exploration. It is not an emergency-response service; follow local authorities for safety-critical decisions.
 
+## Location defaults and privacy
+
+On first load, AquaWatch requests the browser's location permission. When allowed, the position is used as the starting area across Overview, Forecast, Hazards, Air quality, Ocean, History & climate, Community, and Data tools; a manual search or map pin can override it. If permission is denied or unavailable, the app uses its Jakarta fallback and exposes a location-status/retry control. Automatic device coordinates stay in the app's in-memory session state; selected weather or marine requests send coordinates to their configured public data sources. Community watches and observations are stored locally only when you choose to save them.
+
 ## Visual palette
 
 The interface uses the supplied palette: **Soft Periwinkle** `#A682FF`, **Medium Slate Blue** `#715AFF`, **Cornflower Blue** `#5887FF`, **Maya Blue** `#55C1FF`, and **Deep Space Blue** `#102E4A`. Amber remains a weather-semantic accent; alert severities retain separate status colors.

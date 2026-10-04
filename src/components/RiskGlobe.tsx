@@ -41,6 +41,7 @@ const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (character) => (
 interface RiskGlobeProps {
   searchedCity?: CitySearchResult | null;
   searchedIsCountry?: boolean;
+  defaultCenter?: { lat: number; lng: number } | null;
   regionWeather?: LiveRegionWeather;
   regionLabel?: string;
   onSelectLocation: (city: CitySearchResult, kind: GlobeSearchKind) => void;
@@ -48,9 +49,11 @@ interface RiskGlobeProps {
   onDeepZoom?: (lat: number, lng: number) => void;
 }
 
-export const RiskGlobe = ({ searchedCity, searchedIsCountry = false, regionWeather, regionLabel = 'Jakarta, Indonesia', onSelectLocation, onResetSearch, onDeepZoom }: RiskGlobeProps) => {
+export const RiskGlobe = ({ searchedCity, searchedIsCountry = false, defaultCenter, regionWeather, regionLabel = 'Jakarta, Indonesia', onSelectLocation, onResetSearch, onDeepZoom }: RiskGlobeProps) => {
   const globeRef = useRef<GlobeMethods | undefined>(undefined);
   const containerRef = useRef<HTMLDivElement>(null);
+  const defaultCenterLat = defaultCenter?.lat;
+  const defaultCenterLng = defaultCenter?.lng;
   const [dimensions, setDimensions] = useState({ width: 300, height: 460 });
   const [ready, setReady] = useState(false);
   const [selected, setSelected] = useState<GlobePoint | null>(null);
@@ -121,6 +124,11 @@ export const RiskGlobe = ({ searchedCity, searchedIsCountry = false, regionWeath
   }, []);
 
   useEffect(() => {
+    if (!globeRef.current || defaultCenterLat === undefined || defaultCenterLng === undefined || searchedCity) return;
+    globeRef.current.pointOfView({ lat: defaultCenterLat, lng: defaultCenterLng, altitude: JAKARTA_VIEW.altitude }, 800);
+  }, [defaultCenterLat, defaultCenterLng, searchedCity]);
+
+  useEffect(() => {
     if (!searchedCity || !globeRef.current) return;
     globeRef.current.pointOfView({ lat: searchedCity.lat, lng: searchedCity.lng, altitude: searchedIsCountry ? 0.98 : 0.58 }, 1450);
     globeRef.current.controls().autoRotate = false;
@@ -131,12 +139,12 @@ export const RiskGlobe = ({ searchedCity, searchedIsCountry = false, regionWeath
     if (!globeRef.current) return;
     const center = searchedCity
       ? { lat: searchedCity.lat, lng: searchedCity.lng, altitude: searchedIsCountry ? 0.98 : 0.58 }
-      : JAKARTA_VIEW;
+      : { lat: defaultCenterLat ?? JAKARTA_VIEW.lat, lng: defaultCenterLng ?? JAKARTA_VIEW.lng, altitude: JAKARTA_VIEW.altitude };
     globeRef.current.pointOfView(center, 1000);
     const controls = globeRef.current.controls();
     controls.autoRotate = !searchedCity;
     controls.autoRotateSpeed = 0.6;
-  }, [searchedCity, searchedIsCountry]);
+  }, [searchedCity, searchedIsCountry, defaultCenterLat, defaultCenterLng]);
 
   const handleZoom = useCallback((pov: { lat: number; lng: number; altitude: number }) => {
     if (!onDeepZoom || hasTriggeredDeepZoom.current) return;

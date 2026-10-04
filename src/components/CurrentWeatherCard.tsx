@@ -13,6 +13,7 @@ const JAKARTA = { lat: -6.2088, lng: 106.8456 };
 
 interface CurrentWeatherCardProps {
   city?: CitySearchResult | null;
+  defaultCoordinates?: { lat: number; lng: number } | null;
   regionLabel: string;
   onSelectCity?: (city: CitySearchResult) => void;
 }
@@ -24,9 +25,9 @@ const cityIcon = (code: number | null) => {
   return Cloud;
 };
 
-export const CurrentWeatherCard = ({ city, regionLabel, onSelectCity }: CurrentWeatherCardProps) => {
-  const lat = city?.lat ?? JAKARTA.lat;
-  const lng = city?.lng ?? JAKARTA.lng;
+export const CurrentWeatherCard = ({ city, defaultCoordinates, regionLabel, onSelectCity }: CurrentWeatherCardProps) => {
+  const lat = city?.lat ?? defaultCoordinates?.lat ?? JAKARTA.lat;
+  const lng = city?.lng ?? defaultCoordinates?.lng ?? JAKARTA.lng;
   const globalWeather = useGlobalCityWeather();
   const query = useQuery({
     queryKey: ['dashboard-current-weather', city?.id ?? 'jakarta', lat, lng],

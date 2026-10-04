@@ -10,19 +10,22 @@ import { fetchHistoricalDailyWeather, fetchThirtyYearMonthlyBaseline } from '@/l
 import { getRegionLabel } from '@/lib/globalWeather';
 import { fetchFloodStormArchive } from '@/lib/eonet';
 import type { CitySearchResult } from '@/lib/openMeteo';
+import { browserLocationAsCity, useUserLocation } from '@/hooks/useUserLocation';
 
 const JAKARTA = { lat: -6.2088, lng: 106.8456 };
 const dateDaysAgo = (days: number) => { const date = new Date(); date.setUTCDate(date.getUTCDate() - days); return date.toISOString().slice(0, 10); };
 const dayLabel = (date: string) => new Date(`${date}T12:00:00Z`).toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' });
 
 const HistoryPage = () => {
+  const { location: userLocation } = useUserLocation();
   const [place, setPlace] = useState<CitySearchResult | null>(null);
   const [windowDays, setWindowDays] = useState(30);
   const [selectedDate, setSelectedDate] = useState(() => dateDaysAgo(7));
   const [selectedEventId, setSelectedEventId] = useState('');
   const [replayIndex, setReplayIndex] = useState(0);
-  const lat = place?.lat ?? JAKARTA.lat, lng = place?.lng ?? JAKARTA.lng;
-  const regionLabel = place ? getRegionLabel(place) : 'Jakarta, Indonesia';
+  const activePlace = place ?? browserLocationAsCity(userLocation);
+  const lat = activePlace?.lat ?? JAKARTA.lat, lng = activePlace?.lng ?? JAKARTA.lng;
+  const regionLabel = getRegionLabel(activePlace);
   const startDate = dateDaysAgo(windowDays + 7), endDate = dateDaysAgo(7);
   const historyQuery = useQuery({ queryKey: ['historical-daily-weather', lat, lng, startDate, endDate], queryFn: () => fetchHistoricalDailyWeather(lat, lng, startDate, endDate), staleTime: 12 * 60 * 60 * 1000, retry: 1 });
   const month = Number(selectedDate.slice(5, 7)) || new Date().getUTCMonth() + 1;

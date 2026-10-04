@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Waves } from 'lucide-react';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { AppNavigation } from '@/components/AppNavigation';
+import { UserLocationIndicator } from '@/components/UserLocationIndicator';
 
 interface FeaturePageLayoutProps {
   eyebrow: string;
@@ -20,7 +21,7 @@ export const FeaturePageLayout = ({ eyebrow, title, description, children, updat
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-accent text-primary-foreground"><Waves className="h-5 w-5" /></span>
           <span className="min-w-0"><span className="block truncate text-sm font-bold">AquaWatch</span><span className="hidden text-[11px] text-muted-foreground sm:block">Global flood · marine · rainfall risk</span></span>
         </Link>
-        <div className="flex items-center gap-2"><span className="hidden text-xs text-muted-foreground sm:inline">{updatedAt ?? 'Live sources · varies by layer'}</span><ThemeToggle /></div>
+        <div className="flex items-center gap-1 sm:gap-2"><span className="hidden text-xs text-muted-foreground lg:inline">{updatedAt ?? 'Live sources · varies by layer'}</span><UserLocationIndicator /><ThemeToggle /></div>
       </div>
       <AppNavigation />
     </header>

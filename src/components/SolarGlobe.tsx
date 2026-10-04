@@ -7,9 +7,9 @@ export interface SolarGlobeHandle {
   getCanvas: () => HTMLCanvasElement | null;
   setView: (view: { lat: number; lng: number; altitude: number }, durationMs?: number) => void;
 }
-interface SolarGlobeProps { celestial: CelestialSnapshot; }
+interface SolarGlobeProps { celestial: CelestialSnapshot; focusLocation?: { lat: number; lng: number } | null; }
 
-export const SolarGlobe = forwardRef<SolarGlobeHandle, SolarGlobeProps>(({ celestial }, forwardedRef) => {
+export const SolarGlobe = forwardRef<SolarGlobeHandle, SolarGlobeProps>(({ celestial, focusLocation }, forwardedRef) => {
   const globeRef = useRef<GlobeMethods | undefined>(undefined);
   const containerRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 360, height: 420 });
@@ -42,8 +42,8 @@ export const SolarGlobe = forwardRef<SolarGlobeHandle, SolarGlobeProps>(({ celes
     sunLight.position.set(sunPosition.x, sunPosition.y, sunPosition.z);
     sunLight.target.position.set(0, 0, 0);
     globe.lights([ambientLight, sunLight]);
-    globe.pointOfView({ lat: 10, lng: celestial.sun.longitude, altitude: 1.8 }, 700);
-  }, [celestial.sun.latitude, celestial.sun.longitude]);
+    globe.pointOfView({ lat: focusLocation?.lat ?? 10, lng: focusLocation?.lng ?? celestial.sun.longitude, altitude: 1.8 }, 700);
+  }, [celestial.sun.latitude, celestial.sun.longitude, focusLocation?.lat, focusLocation?.lng]);
 
   return <div ref={containerRef} className="solar-globe overflow-hidden rounded-2xl border bg-[#06162d] shadow-lg shadow-sky-950/10" style={{ height: size.height }}>
     <Globe

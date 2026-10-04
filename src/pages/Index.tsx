@@ -14,6 +14,8 @@ import { ThemeToggle } from '@/components/ThemeToggle';
 import { CitySearch } from '@/components/CitySearch';
 import { Button } from '@/components/ui/button';
 import { useRegionalWeather } from '@/hooks/useRegionalWeather';
+import { browserLocationAsCity, useUserLocation } from '@/hooks/useUserLocation';
+import { UserLocationIndicator } from '@/components/UserLocationIndicator';
 import { buildRegionAlerts } from '@/lib/liveAlerts';
 import { getRegionLabel } from '@/lib/globalWeather';
 import { fetchFloodStormEvents } from '@/lib/eonet';
@@ -23,6 +25,7 @@ import { Waves, Loader2, Globe as GlobeIcon, Map as MapIcon, CloudRain, RotateCc
 const RiskGlobe = lazy(() => import('@/components/RiskGlobe').then((module) => ({ default: module.RiskGlobe })));
 const RiskMap2D = lazy(() => import('@/components/RiskMap2D').then((module) => ({ default: module.RiskMap2D })));
 const MapFallback = () => <div className="w-full h-[340px] sm:h-[420px] lg:h-[500px] rounded-lg border bg-muted flex flex-col items-center justify-center gap-2 text-muted-foreground"><Loader2 className="w-6 h-6 animate-spin" /><p className="text-xs">Loading map…</p></div>;
+const FALLBACK_CENTER = { lat: -6.2088, lng: 106.8456 };
 
 const forecastHref = (city: CitySearchResult | null, isCountry = false) => {
   if (!city) return '/forecast';
@@ -35,16 +38,19 @@ const forecastHref = (city: CitySearchResult | null, isCountry = false) => {
 
 const Index = () => {
   const [viewMode, setViewMode] = useState<'globe' | 'map'>('globe');
+  const { location: userLocation } = useUserLocation();
   const [searchedCity, setSearchedCity] = useState<CitySearchResult | null>(null);
   const [searchedIsCountry, setSearchedIsCountry] = useState(false);
   const [mapCenter, setMapCenter] = useState<{ lat: number; lng: number } | null>(null);
-  const mapInitialCenter = useMemo(() => mapCenter ?? (searchedCity ? { lat: searchedCity.lat, lng: searchedCity.lng } : null), [mapCenter, searchedCity]);
-  const regionLabel = searchedIsCountry && searchedCity ? searchedCity.country : getRegionLabel(searchedCity);
-  const { data: regionWeather, isLoading: regionLoading, isError: regionErrored } = useRegionalWeather(searchedCity);
+  const browserCity = useMemo(() => browserLocationAsCity(userLocation), [userLocation]);
+  const activeCity = searchedCity ?? browserCity;
+  const mapInitialCenter = useMemo(() => mapCenter ?? (searchedCity ? { lat: searchedCity.lat, lng: searchedCity.lng } : userLocation ?? FALLBACK_CENTER), [mapCenter, searchedCity, userLocation]);
+  const regionLabel = searchedIsCountry && searchedCity ? searchedCity.country : getRegionLabel(activeCity);
+  const { data: regionWeather, isLoading: regionLoading, isError: regionErrored } = useRegionalWeather(activeCity);
   const { data: events = [], isLoading: eventsLoading } = useQuery({
     queryKey: ['eonet-flood-storm-events'], queryFn: fetchFloodStormEvents, staleTime: 15 * 60 * 1000, retry: 1,
   });
-  const center = searchedCity ? { lat: searchedCity.lat, lng: searchedCity.lng } : { lat: -6.2088, lng: 106.8456 };
+  const center = searchedCity ? { lat: searchedCity.lat, lng: searchedCity.lng } : userLocation ?? FALLBACK_CENTER;
   const alerts = buildRegionAlerts(regionWeather?.areas ?? [], events, center);
 
   const handleDeepZoom = (lat: number, lng: number) => { setMapCenter({ lat, lng }); setViewMode('map'); };
@@ -78,8 +84,8 @@ const Index = () => {
       </header>
 
       <main className="container mx-auto px-4 py-5 sm:py-6 lg:py-8 space-y-6 sm:space-y-8 lg:space-y-10">
-        <div className="flex flex-col gap-1"><p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">Local weather</p><h2 className="text-lg font-semibold">{regionLabel}</h2></div>
-        <CurrentWeatherCard city={searchedCity} regionLabel={regionLabel} onSelectCity={(location) => handleLocationSelect(location, 'city')} />
+        <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">Local weather</p><h2 className="text-lg font-semibold">{regionLabel}</h2></div><UserLocationIndicator /></div>
+        <CurrentWeatherCard city={searchedCity} defaultCoordinates={userLocation} regionLabel={regionLabel} onSelectCity={(location) => handleLocationSelect(location, 'city')} />
         <section aria-labelledby="overview-heading">
           <div className="mb-3"><h2 id="overview-heading" className="text-lg font-semibold sm:text-xl">Rain &amp; flood overview</h2><p className="mt-0.5 text-xs text-muted-foreground sm:text-sm">The key conditions for {regionLabel} at a glance.</p></div>
           <StatsOverview data={regionWeather} isLoading={regionLoading} regionLabel={regionLabel} />
@@ -99,12 +105,12 @@ const Index = () => {
           </div>
           {viewMode === 'map' && <div className="mb-3 flex flex-wrap items-center gap-2">
             <CitySearch onSelect={(location) => handleLocationSelect(location, 'city')} onReset={handleCityReset} placeholder="Search a city on the map…" />
-            {searchedCity && <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={handleCityReset}><RotateCcw className="w-3.5 h-3.5" />Back to Jakarta</Button>}
+            {searchedCity && <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={handleCityReset}><RotateCcw className="w-3.5 h-3.5" />Back to default location</Button>}
           </div>}
           {regionErrored && !regionWeather && <div className="mb-3 rounded-lg border border-risk-medium/30 bg-risk-medium/5 px-3 py-2 text-sm text-muted-foreground">Live regional weather could not be loaded; the dashboard will refresh and retry. It will not substitute mock measurements.</div>}
           <Suspense fallback={<MapFallback />}>
             {viewMode === 'globe'
-              ? <RiskGlobe searchedCity={searchedCity} searchedIsCountry={searchedIsCountry} regionWeather={regionWeather} regionLabel={regionLabel} onSelectLocation={handleLocationSelect} onResetSearch={handleCityReset} onDeepZoom={handleDeepZoom} />
+              ? <RiskGlobe searchedCity={searchedCity} searchedIsCountry={searchedIsCountry} defaultCenter={userLocation ?? FALLBACK_CENTER} regionWeather={regionWeather} regionLabel={regionLabel} onSelectLocation={handleLocationSelect} onResetSearch={handleCityReset} onDeepZoom={handleDeepZoom} />
               : <RiskMap2D searchedCity={searchedCity} initialCenter={mapInitialCenter} regionWeather={regionWeather} regionLabel={regionLabel} />}
           </Suspense>
         </section>

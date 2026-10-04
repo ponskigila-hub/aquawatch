@@ -2,13 +2,15 @@ import { useEffect, useRef, useState } from 'react';
 import Globe, { type GlobeMethods } from 'react-globe.gl';
 import type { DownwindEstimate, EarthquakePoint, ThermalDetection } from '@/lib/environmentalLayers';
 
-interface HazardGlobeProps { earthquakes: EarthquakePoint[]; fires: ThermalDetection[]; windVectors?: DownwindEstimate[]; onEarthquakeClick?: (event: EarthquakePoint) => void; }
+interface HazardGlobeProps { earthquakes: EarthquakePoint[]; fires: ThermalDetection[]; initialCenter?: { lat: number; lng: number }; windVectors?: DownwindEstimate[]; onEarthquakeClick?: (event: EarthquakePoint) => void; }
 const escape = (text: string) => text.replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char] ?? char));
 const magColor = (magnitude: number) => magnitude >= 5 ? '#ef4444' : magnitude >= 3 ? '#f97316' : '#facc15';
 
-export const HazardGlobe = ({ earthquakes, fires, windVectors = [], onEarthquakeClick }: HazardGlobeProps) => {
+export const HazardGlobe = ({ earthquakes, fires, initialCenter, windVectors = [], onEarthquakeClick }: HazardGlobeProps) => {
   const ref = useRef<GlobeMethods | undefined>(undefined);
   const container = useRef<HTMLDivElement>(null);
+  const initialLat = initialCenter?.lat;
+  const initialLng = initialCenter?.lng;
   const [size, setSize] = useState({ width: 480, height: 470 });
   const quakePoints = earthquakes.slice(0, 160).map((event) => ({ ...event, kind: 'earthquake' as const }));
   const firePoints = fires.slice(0, 320).map((event) => ({ ...event, kind: 'thermal' as const, magnitude: 0, place: 'Satellite heat detection' }));
@@ -19,6 +21,11 @@ export const HazardGlobe = ({ earthquakes, fires, windVectors = [], onEarthquake
     const resize = () => setSize({ width: container.current?.getBoundingClientRect().width ?? 480, height: window.innerWidth < 640 ? 360 : 470 });
     resize(); window.addEventListener('resize', resize); return () => window.removeEventListener('resize', resize);
   }, []);
+
+  useEffect(() => {
+    if (initialLat === undefined || initialLng === undefined) return;
+    ref.current?.pointOfView({ lat: initialLat, lng: initialLng, altitude: 1.8 }, 700);
+  }, [initialLat, initialLng]);
 
   return <div ref={container} className="overflow-hidden rounded-2xl border bg-[#06162d] shadow-lg shadow-sky-950/10" style={{ height: size.height }}>
     <Globe

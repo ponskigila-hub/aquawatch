@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { BellRing, Camera, LocateFixed, MapPin, Plus, Trash2, TriangleAlert } from 'lucide-react';
@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import type { CitySearchResult } from '@/lib/openMeteo';
 import { compressPhoto, readAlertRules, readObservations, removeObservation, saveObservation, writeAlertRules, type AlertRule, type GroundObservation, type ObservationKind } from '@/lib/communityStorage';
+import { browserLocationAsCity, useUserLocation } from '@/hooks/useUserLocation';
 
 interface ThresholdReading { rain3hMm: number | null; gustKmh: number | null; checkedAt: string; }
 const WEATHER_URL = 'https://api.open-meteo.com/v1/forecast';
@@ -33,6 +34,7 @@ async function readThresholdWeather(rule: AlertRule): Promise<ThresholdReading> 
 const inputClass = 'h-10 w-full rounded-lg border bg-background px-3 text-sm';
 
 const CommunityPage = () => {
+  const { location: userLocation, requestLocation } = useUserLocation();
   const [rules, setRules] = useState<AlertRule[]>(() => readAlertRules());
   const [reports, setReports] = useState<GroundObservation[]>([]);
   const [selectedCity, setSelectedCity] = useState<CitySearchResult | null>(null);
@@ -45,9 +47,17 @@ const CommunityPage = () => {
   const [savingReport, setSavingReport] = useState(false);
   const [notificationState, setNotificationState] = useState<NotificationPermission | 'unsupported'>(() => typeof Notification === 'undefined' ? 'unsupported' : Notification.permission);
   const [loadError, setLoadError] = useState('');
+  const pinManuallyAdjusted = useRef(false);
+  const defaultCity = browserLocationAsCity(userLocation);
+  const activeCity = selectedCity ?? defaultCity;
+  const userLat = userLocation?.lat;
+  const userLng = userLocation?.lng;
 
   useEffect(() => { void readObservations().then(setReports).catch(() => setLoadError('This browser could not open local observation storage.')); }, []);
   useEffect(() => { writeAlertRules(rules); }, [rules]);
+  useEffect(() => {
+    if (userLat !== undefined && userLng !== undefined && !pinManuallyAdjusted.current) setPin({ lat: userLat, lng: userLng });
+  }, [userLat, userLng]);
 
   const activeRules = useMemo(() => rules.filter((rule) => rule.enabled), [rules]);
   const monitor = useQuery({
@@ -80,14 +90,14 @@ const CommunityPage = () => {
     id: report.id, lat: report.lat, lng: report.lng, label: report.kind,
     detail: `${report.note} · community report · ${new Date(report.observedAt).toLocaleString()}`,
     color: '#d97706', radius: 8,
-  })), [reports]);
-  const handleMapClick = useCallback((point: { lat: number; lng: number }) => setPin(point), []);
+  })).concat([{ id: 'draft-observation-pin', lat: pin.lat, lng: pin.lng, label: 'Current observation pin', detail: 'This browser-only draft location has not been shared.', color: '#A682FF', radius: 10 }]), [pin.lat, pin.lng, reports]);
+  const handleMapClick = useCallback((point: { lat: number; lng: number }) => { pinManuallyAdjusted.current = true; setPin(point); }, []);
 
   const addRule = () => {
-    if (!selectedCity) { toast.error('Search for a city first.'); return; }
+    if (!activeCity) { toast.error('Allow location access or search for a city first.'); return; }
     const rainfall3hMm = Number(ruleRain), windGustKmh = Number(ruleWind);
     if (!Number.isFinite(rainfall3hMm) || rainfall3hMm <= 0 || !Number.isFinite(windGustKmh) || windGustKmh <= 0) { toast.error('Enter positive rainfall and wind limits.'); return; }
-    setRules((current) => [{ id: crypto.randomUUID(), name: `${selectedCity.name}, ${selectedCity.country}`, lat: selectedCity.lat, lng: selectedCity.lng, rainfall3hMm, windGustKmh, enabled: true }, ...current]);
+    setRules((current) => [{ id: crypto.randomUUID(), name: activeCity.country ? `${activeCity.name}, ${activeCity.country}` : activeCity.name, lat: activeCity.lat, lng: activeCity.lng, rainfall3hMm, windGustKmh, enabled: true }, ...current]);
     toast.success('Weather watch saved on this device.');
     setSelectedCity(null);
   };
@@ -121,8 +131,8 @@ const CommunityPage = () => {
   return <FeaturePageLayout eyebrow="Local tools" title="Community & personal alerts" description="Set rain and wind limits for places you care about, and save local observations on the map. These records stay in this browser; they are not sent to a shared public feed.">
     <div className="grid gap-5 xl:grid-cols-[minmax(0,1.25fr)_minmax(320px,0.75fr)]">
       <section className="space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-semibold">Observation map</h2><p className="text-sm text-muted-foreground">Click the map to place a report pin.</p></div><Button variant="outline" size="sm" className="gap-2" onClick={() => navigator.geolocation?.getCurrentPosition((position) => setPin({ lat: position.coords.latitude, lng: position.coords.longitude }), () => toast.error('Could not access your location.'))}><LocateFixed className="h-4 w-4" />Use my location</Button></div>
-        <EnvironmentalMap points={mapPoints} height={420} center={reports[0] ? { lat: reports[0].lat, lng: reports[0].lng } : { lat: 15, lng: 0 }} zoom={reports.length ? 4 : 2} onMapClick={handleMapClick} emptyLabel="No saved reports yet. Add one below." />
+        <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-semibold">Observation map</h2><p className="text-sm text-muted-foreground">Click the map to place a report pin.</p></div><Button variant="outline" size="sm" className="gap-2" onClick={() => { if (userLocation) setPin({ lat: userLocation.lat, lng: userLocation.lng }); pinManuallyAdjusted.current = false; requestLocation(); }}><LocateFixed className="h-4 w-4" />Use my location</Button></div>
+        <EnvironmentalMap points={mapPoints} height={420} center={userLocation ?? (reports[0] ? { lat: reports[0].lat, lng: reports[0].lng } : { lat: -6.2088, lng: 106.8456 })} zoom={userLocation ? 8 : reports.length ? 4 : 5} onMapClick={handleMapClick} emptyLabel="No saved reports yet. Add one below." />
         <Card><CardHeader><CardTitle className="flex items-center gap-2 text-base"><MapPin className="h-4 w-4 text-primary" />Add an observation</CardTitle><CardDescription>Pin flooding, outages, hail, or strong winds. Adding a photo is optional.</CardDescription></CardHeader><CardContent className="space-y-3">
           <p className="text-xs text-muted-foreground">Pin: {pin.lat.toFixed(4)}, {pin.lng.toFixed(4)}</p>
           <div className="grid gap-3 sm:grid-cols-2"><div className="space-y-1.5"><Label htmlFor="report-kind">What happened?</Label><select id="report-kind" className={inputClass} value={reportKind} onChange={(event) => setReportKind(event.target.value as ObservationKind)}><option>street flooding</option><option>power outage</option><option>hail</option><option>strong wind</option><option>other</option></select></div><div className="space-y-1.5"><Label htmlFor="report-photo">Photo (optional)</Label><Input id="report-photo" type="file" accept="image/*" className="h-10 text-xs" onChange={async (event) => { const file = event.target.files?.[0]; if (!file) return; try { setPhotoDataUrl(await compressPhoto(file)); } catch (error) { toast.error(error instanceof Error ? error.message : 'Could not use that photo.'); } }} /></div></div>
@@ -138,9 +148,9 @@ const CommunityPage = () => {
 
       <aside className="space-y-4">
         <Card><CardHeader><CardTitle className="flex items-center gap-2 text-base"><BellRing className="h-4 w-4 text-primary" />Personal weather watches</CardTitle><CardDescription>Check forecast rain and wind near saved places every five minutes while this page is open.</CardDescription></CardHeader><CardContent className="space-y-4">
-          <div className="space-y-2"><Label>Choose a place</Label><CitySearch onSelect={setSelectedCity} onReset={() => setSelectedCity(null)} placeholder="Search city worldwide…" /></div>
+          <div className="space-y-2"><Label>Choose a place</Label><CitySearch onSelect={setSelectedCity} onReset={() => setSelectedCity(null)} placeholder="Search city worldwide…" /><p className="text-[11px] text-muted-foreground">{activeCity ? selectedCity ? `Selected: ${activeCity.name}${activeCity.country ? `, ${activeCity.country}` : ''}` : 'Default watch area: your current browser location.' : 'Allow location access or search for a city to choose a watch area.'}</p></div>
           <div className="grid grid-cols-2 gap-3"><div className="space-y-1.5"><Label htmlFor="rain-limit">Rain in next 3 hours (mm)</Label><Input id="rain-limit" type="number" min="1" value={ruleRain} onChange={(event) => setRuleRain(event.target.value)} /></div><div className="space-y-1.5"><Label htmlFor="wind-limit">Wind gust (km/h)</Label><Input id="wind-limit" type="number" min="1" value={ruleWind} onChange={(event) => setRuleWind(event.target.value)} /></div></div>
-          <Button onClick={addRule} disabled={!selectedCity} className="w-full gap-2"><Plus className="h-4 w-4" />Save place &amp; limits</Button>
+          <Button onClick={addRule} disabled={!activeCity} className="w-full gap-2"><Plus className="h-4 w-4" />Save place &amp; limits</Button>
           <Button variant="outline" onClick={() => void enableNotifications()} disabled={notificationState === 'unsupported' || notificationState === 'granted'} className="w-full gap-2"><BellRing className="h-4 w-4" />{notificationState === 'granted' ? 'Browser alerts are on' : notificationState === 'denied' ? 'Notifications are blocked in browser settings' : notificationState === 'unsupported' ? 'Browser notifications unavailable' : 'Enable browser alerts'}</Button>
           <div className="rounded-lg border bg-muted/40 p-3 text-xs leading-relaxed text-muted-foreground"><TriangleAlert className="mr-1 inline h-3.5 w-3.5" />These are forecast-based personal reminders, not official warnings. Keep this page open for checks; a server-side background alert service is not configured.</div>
         </CardContent></Card>

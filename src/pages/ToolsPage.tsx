@@ -14,10 +14,12 @@ import { fetchFloodStormEvents, type EonetEvent } from '@/lib/eonet';
 import { calculateCelestialSnapshot } from '@/lib/celestial';
 import { readObservations, type GroundObservation } from '@/lib/communityStorage';
 import type { CitySearchResult } from '@/lib/openMeteo';
+import { useUserLocation } from '@/hooks/useUserLocation';
 
 interface Bounds { west: number; south: number; east: number; north: number; }
 interface ExportPoint { id: string; lat: number; lng: number; label: string; category: string; date: string; note?: string; source: string; }
-const DEFAULT_BOUNDS: Bounds = { west: -180, south: -90, east: 180, north: 90 };
+const FALLBACK_POSITION = { lat: -6.2088, lng: 106.8456 };
+const DEFAULT_BOUNDS: Bounds = { west: 101.8456, south: -11.2088, east: 111.8456, north: -1.2088 };
 const inputClass = 'h-10 w-full rounded-lg border bg-background px-3 text-sm';
 const inBounds = (lat: number, lng: number, box: Bounds) => lng >= box.west && lng <= box.east && lat >= box.south && lat <= box.north;
 const saveJson = (filename: string, payload: unknown) => {
@@ -34,6 +36,7 @@ const saveCsv = (filename: string, rows: string[][]) => {
 };
 
 const ToolsPage = () => {
+  const { location: userLocation } = useUserLocation();
   const [now, setNow] = useState(() => new Date());
   const [place, setPlace] = useState<CitySearchResult | null>(null);
   const [bounds, setBounds] = useState<Bounds>(DEFAULT_BOUNDS);
@@ -45,13 +48,24 @@ const ToolsPage = () => {
   const globeRef = useRef<SolarGlobeHandle>(null);
   const [exportError, setExportError] = useState('');
   const [recordingError, setRecordingError] = useState('');
+  const boundsManuallyAdjusted = useRef(false);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 60_000);
     void readObservations().then(setObservations).catch(() => undefined);
     return () => window.clearInterval(timer);
   }, []);
-  const celestial = useMemo(() => calculateCelestialSnapshot(now, place ? { lat: place.lat, lng: place.lng } : undefined), [now, place]);
+  const activePosition = place ?? userLocation ?? FALLBACK_POSITION;
+  const positionLat = activePosition?.lat;
+  const positionLng = activePosition?.lng;
+  useEffect(() => {
+    if (boundsManuallyAdjusted.current || positionLat === undefined || positionLng === undefined) return;
+    setBounds({
+      west: Math.max(-180, positionLng - 5), east: Math.min(180, positionLng + 5),
+      south: Math.max(-90, positionLat - 5), north: Math.min(90, positionLat + 5),
+    });
+  }, [positionLat, positionLng]);
+  const celestial = useMemo(() => calculateCelestialSnapshot(now, positionLat !== undefined && positionLng !== undefined ? { lat: positionLat, lng: positionLng } : undefined), [now, positionLat, positionLng]);
   const eventQuery = useQuery({ queryKey: ['tools-reported-events'], queryFn: fetchFloodStormEvents, staleTime: 10 * 60 * 1000, retry: 1 });
   const events = useMemo<EonetEvent[]>(() => eventQuery.data ?? [], [eventQuery.data]);
   const exportPoints = useMemo<ExportPoint[]>(() => [
@@ -63,6 +77,7 @@ const ToolsPage = () => {
     ...observations.map((item) => ({ id: `report-${item.id}`, lat: item.lat, lng: item.lng, label: item.kind, detail: item.note, color: '#d97706' })),
   ], [events, observations]);
   const onMapClick = useCallback((point: { lat: number; lng: number }) => {
+    boundsManuallyAdjusted.current = true;
     if (!firstCorner) { setFirstCorner(point); toast.message('First corner set. Click the opposite corner to finish the box.'); return; }
     const west = Math.min(firstCorner.lng, point.lng), east = Math.max(firstCorner.lng, point.lng);
     const south = Math.min(firstCorner.lat, point.lat), north = Math.max(firstCorner.lat, point.lat);
@@ -100,7 +115,7 @@ const ToolsPage = () => {
     let recorder: MediaRecorder;
     try { recorder = new MediaRecorder(stream, { mimeType }); }
     catch { stream.getTracks().forEach((track) => track.stop()); setRecordingError('Could not start the browser video recorder.'); return; }
-    const center = place ?? { lat: 0, lng: 0 };
+    const center = activePosition ?? { lat: 0, lng: 0 };
     const startLng = center.lng - 180;
     let interval = 0;
     let timeout = 0;
@@ -122,25 +137,25 @@ const ToolsPage = () => {
     timeout = window.setTimeout(() => { if (recorder.state !== 'inactive') recorder.stop(); }, 12_000);
   };
 
-  const center = place ? { lat: place.lat, lng: place.lng } : { lat: 15, lng: 0 };
+  const center = { lat: activePosition.lat, lng: activePosition.lng };
   return <FeaturePageLayout eyebrow="Explore & export" title="Sunlight, moon & data tools" description="See which side of Earth is facing the Sun, capture a short globe orbit, and export environmental points from a map area.">
     <div className="grid gap-5 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
       <section className="space-y-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"><div><h2 className="text-lg font-semibold">Live day and night</h2><p className="text-sm text-muted-foreground">The light side faces the Sun; the dark side is in night.</p></div><div className="w-full sm:max-w-xs"><CitySearch onSelect={setPlace} onReset={() => setPlace(null)} placeholder="Search a city for local daylight…" /></div></div>
-        <SolarGlobe ref={globeRef} celestial={celestial} />
+        <SolarGlobe ref={globeRef} celestial={celestial} focusLocation={activePosition ? { lat: activePosition.lat, lng: activePosition.lng } : null} />
         <div className="grid gap-3 sm:grid-cols-3">
           <Card><CardContent className="flex items-center gap-3 p-4"><Sun className="h-5 w-5 text-amber-500" /><div><p className="text-xs text-muted-foreground">Sun overhead</p><p className="text-sm font-semibold">{celestial.sun.latitude.toFixed(1)}° lat · {celestial.sun.longitude.toFixed(1)}° lon</p></div></CardContent></Card>
           <Card><CardContent className="flex items-center gap-3 p-4"><Moon className="h-5 w-5 text-sky-500" /><div><p className="text-xs text-muted-foreground">Moon · {celestial.moonPhase}</p><p className="text-sm font-semibold">About {celestial.moonIlluminationPercent}% lit</p></div></CardContent></Card>
-          <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">{place ? `Daylight near ${place.name}` : 'Daylight at the equator'}</p><p className="text-sm font-semibold">{celestial.daylight ? 'Daytime' : 'Nighttime'} · Sun {celestial.solarAltitudeDegrees.toFixed(0)}° above horizon</p></CardContent></Card>
+          <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">{place ? `Daylight near ${place.name}` : userLocation ? 'Daylight at your location' : 'Daylight near Jakarta (fallback)'}</p><p className="text-sm font-semibold">{celestial.daylight ? 'Daytime' : 'Nighttime'} · Sun {celestial.solarAltitudeDegrees.toFixed(0)}° above horizon</p></CardContent></Card>
         </div>
         <Card><CardHeader><CardTitle className="flex items-center gap-2 text-base"><Film className="h-4 w-4 text-primary" />Make a globe video</CardTitle><CardDescription>Record a 12-second camera orbit around the selected city or the world and download a WebM clip.</CardDescription></CardHeader><CardContent className="flex flex-wrap items-center gap-3"><Button onClick={recordOrbit} disabled={recording} className="gap-2"><Film className="h-4 w-4" />{recording ? 'Recording…' : 'Record globe orbit'}</Button>{recording && <span className="text-sm text-muted-foreground">Keep this tab open; the clip saves when recording finishes.</span>}{recordingError && <p role="alert" className="w-full text-sm text-destructive">{recordingError}</p>}<p className="w-full text-xs text-muted-foreground">The video is generated locally by your browser. Output size and quality depend on your device and browser.</p></CardContent></Card>
       </section>
 
       <section className="space-y-4">
         <Card><CardHeader><CardTitle className="flex items-center gap-2 text-base"><SquareDashedMousePointer className="h-4 w-4 text-primary" />Export points in an area</CardTitle><CardDescription>Click two opposite corners on the map, or enter the box coordinates below.</CardDescription></CardHeader><CardContent className="space-y-4">
-          <EnvironmentalMap points={mapPoints} center={center} zoom={place ? 4 : 1} height={300} onMapClick={onMapClick} emptyLabel="Loading reported and saved points…" />
+          <EnvironmentalMap points={mapPoints} center={center} zoom={activePosition ? 5 : 2} height={300} onMapClick={onMapClick} emptyLabel="Loading reported and saved points…" />
           <p className="text-xs text-muted-foreground">{firstCorner ? `First corner: ${firstCorner.lat.toFixed(2)}, ${firstCorner.lng.toFixed(2)} · click the opposite corner` : 'Choose two map corners to select an area.'} · {events.length} reported events · {observations.length} local pins</p>
-          <div className="grid grid-cols-2 gap-3"><div className="space-y-1"><Label htmlFor="west">West longitude</Label><Input id="west" type="number" min="-180" max="180" step="0.01" value={bounds.west} onChange={(event) => setBounds((box) => ({ ...box, west: Number(event.target.value) }))} /></div><div className="space-y-1"><Label htmlFor="east">East longitude</Label><Input id="east" type="number" min="-180" max="180" step="0.01" value={bounds.east} onChange={(event) => setBounds((box) => ({ ...box, east: Number(event.target.value) }))} /></div><div className="space-y-1"><Label htmlFor="south">South latitude</Label><Input id="south" type="number" min="-90" max="90" step="0.01" value={bounds.south} onChange={(event) => setBounds((box) => ({ ...box, south: Number(event.target.value) }))} /></div><div className="space-y-1"><Label htmlFor="north">North latitude</Label><Input id="north" type="number" min="-90" max="90" step="0.01" value={bounds.north} onChange={(event) => setBounds((box) => ({ ...box, north: Number(event.target.value) }))} /></div></div>
+          <div className="grid grid-cols-2 gap-3"><div className="space-y-1"><Label htmlFor="west">West longitude</Label><Input id="west" type="number" min="-180" max="180" step="0.01" value={bounds.west} onChange={(event) => { boundsManuallyAdjusted.current = true; setBounds((box) => ({ ...box, west: Number(event.target.value) })); }} /></div><div className="space-y-1"><Label htmlFor="east">East longitude</Label><Input id="east" type="number" min="-180" max="180" step="0.01" value={bounds.east} onChange={(event) => { boundsManuallyAdjusted.current = true; setBounds((box) => ({ ...box, east: Number(event.target.value) })); }} /></div><div className="space-y-1"><Label htmlFor="south">South latitude</Label><Input id="south" type="number" min="-90" max="90" step="0.01" value={bounds.south} onChange={(event) => { boundsManuallyAdjusted.current = true; setBounds((box) => ({ ...box, south: Number(event.target.value) })); }} /></div><div className="space-y-1"><Label htmlFor="north">North latitude</Label><Input id="north" type="number" min="-90" max="90" step="0.01" value={bounds.north} onChange={(event) => { boundsManuallyAdjusted.current = true; setBounds((box) => ({ ...box, north: Number(event.target.value) })); }} /></div></div>
           <div className="flex flex-wrap gap-x-4 gap-y-2 text-sm"><label className="flex items-center gap-2"><input type="checkbox" checked={includeEvents} onChange={(event) => setIncludeEvents(event.target.checked)} />Reported events</label><label className="flex items-center gap-2"><input type="checkbox" checked={includeObservations} onChange={(event) => setIncludeObservations(event.target.checked)} />My local pins</label></div>
           <p className="text-sm">{exportPoints.length} point{exportPoints.length === 1 ? '' : 's'} inside this box</p>
           <div className="flex flex-wrap gap-2"><Button onClick={exportGeoJson} disabled={!exportPoints.length} className="gap-2"><Download className="h-4 w-4" />Download GeoJSON</Button><Button variant="outline" onClick={exportCsv} disabled={!exportPoints.length}>Download CSV</Button></div>

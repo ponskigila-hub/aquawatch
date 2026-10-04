@@ -132,6 +132,7 @@ const haversineKm = (aLat: number, aLng: number, bLat: number, bLng: number) => 
 
 export const getRegionLabel = (city?: CitySearchResult | null) => {
   if (!city) return 'Jakarta, Indonesia';
+  if (!city.country.trim()) return city.name;
   if (city.name.trim().toLowerCase() === city.country.trim().toLowerCase()) return city.country;
   const admin1 = city.admin1?.trim();
   const repeatedAdmin = admin1 && (admin1.toLowerCase() === city.name.trim().toLowerCase() || admin1.toLowerCase() === city.country.trim().toLowerCase());

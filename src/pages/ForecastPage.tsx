@@ -6,6 +6,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { CitySearch } from '@/components/CitySearch';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { AppNavigation } from '@/components/AppNavigation';
+import { UserLocationIndicator } from '@/components/UserLocationIndicator';
+import { browserLocationAsCity, useUserLocation } from '@/hooks/useUserLocation';
 import { WeatherSummary } from '@/components/WeatherSummary';
 import { useRegionalOutlook } from '@/hooks/useRegionalOutlook';
 import { getRegionLabel } from '@/lib/globalWeather';
@@ -48,14 +50,16 @@ const formatHour = (localTime: string) => new Intl.DateTimeFormat(undefined, {
 
 const ForecastPage = () => {
   const [searchParams] = useSearchParams();
+  const { location: userLocation } = useUserLocation();
   const [city, setCity] = useState<CitySearchResult | null>(() => getInitialCity(searchParams));
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  const regionLabel = getRegionLabel(city);
-  const lat = city?.lat ?? JAKARTA.lat;
-  const lng = city?.lng ?? JAKARTA.lng;
-  const outlookQuery = useRegionalOutlook(city);
+  const activeCity = city ?? browserLocationAsCity(userLocation);
+  const regionLabel = getRegionLabel(activeCity);
+  const lat = activeCity?.lat ?? JAKARTA.lat;
+  const lng = activeCity?.lng ?? JAKARTA.lng;
+  const outlookQuery = useRegionalOutlook(activeCity);
   const currentQuery = useQuery({
-    queryKey: ['forecast-current-city-weather', city?.id ?? 'jakarta', lat, lng],
+    queryKey: ['forecast-current-city-weather', activeCity?.id ?? 'jakarta', lat, lng],
     queryFn: () => fetchCityWeather(lat, lng),
     staleTime: 10 * 60 * 1000,
     refetchInterval: 30 * 60 * 1000,
@@ -72,7 +76,7 @@ const ForecastPage = () => {
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-accent text-primary-foreground"><CloudRain className="h-5 w-5" /></div>
             <div><h1 className="font-bold leading-tight">Weather &amp; Flood Forecast</h1><p className="hidden text-xs text-muted-foreground sm:block">A simple outlook for your area</p></div>
           </div>
-          <div className="flex items-center gap-2"><Button variant="outline" size="sm" asChild><Link to="/" className="gap-1.5"><ArrowLeft className="h-4 w-4" /><span className="hidden sm:inline">Dashboard</span><span className="sm:hidden">Back</span></Link></Button><ThemeToggle /></div>
+          <div className="flex items-center gap-1 sm:gap-2"><UserLocationIndicator /><Button variant="outline" size="sm" asChild><Link to="/" className="gap-1.5"><ArrowLeft className="h-4 w-4" /><span className="hidden sm:inline">Dashboard</span><span className="sm:hidden">Back</span></Link></Button><ThemeToggle /></div>
         </div>
         <AppNavigation />
       </header>
@@ -84,7 +88,7 @@ const ForecastPage = () => {
         </section>
 
         <Card className="overflow-hidden border-sky-500/15 bg-gradient-to-br from-sky-500/[0.07] via-card to-indigo-500/[0.06]">
-          <CardHeader className="pb-2"><CardTitle className="text-base">Today in {city?.name ?? 'Jakarta'}</CardTitle><CardDescription>{regionLabel}</CardDescription></CardHeader>
+          <CardHeader className="pb-2"><CardTitle className="text-base">Today in {activeCity?.name ?? 'Jakarta'}</CardTitle><CardDescription>{regionLabel}</CardDescription></CardHeader>
           <CardContent>
           {currentQuery.isLoading ? <div className="flex min-h-36 items-center justify-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Loading today’s weather…</div>
               : current ? <WeatherSummary weather={current} compact />
