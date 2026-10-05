@@ -37,11 +37,20 @@ export function browserLocationAsCity(location: UserLocation | null): CitySearch
 }
 
 export function UserLocationProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<Omit<UserLocationValue, 'requestLocation'>>({
-    location: null,
-    status: 'locating',
+  const initialAppPosition = useRef<UserLocation | null>(null);
+  if (initialAppPosition.current === null && typeof window !== 'undefined') {
+    const params = new URLSearchParams(window.location.search);
+    const lat = Number(params.get('aw_position_lat'));
+    const lng = Number(params.get('aw_position_lng'));
+    if (Number.isFinite(lat) && lat >= -90 && lat <= 90 && Number.isFinite(lng) && lng >= -180 && lng <= 180 && params.has('aw_position_lat') && params.has('aw_position_lng')) {
+      initialAppPosition.current = { lat, lng, accuracyMeters: null, timestamp: Date.now() };
+    }
+  }
+  const [state, setState] = useState<Omit<UserLocationValue, 'requestLocation'>>(() => ({
+    location: initialAppPosition.current,
+    status: initialAppPosition.current ? 'available' : 'locating',
     statusMessage: null,
-  });
+  }));
   const autoRequestStarted = useRef(false);
 
   const requestLocation = useCallback(() => {
@@ -97,6 +106,7 @@ export function UserLocationProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (autoRequestStarted.current) return;
     autoRequestStarted.current = true;
+    if (initialAppPosition.current) return;
     requestLocation();
   }, [requestLocation]);
 

@@ -82,3 +82,8 @@ cd backend && python -m pytest -q
 - `GET /api/ocean/oisst/raster?metric=sst|anomaly` — full global NOAA daily raster as a transparent Web-Mercator PNG, with `X-Data-Time` and `X-Data-Source` headers.
 
 The ResNet18 ImageNet weights initialize the current encoder, but the precipitation/anomaly output head is **not trained on weather observations**. Use a task-specific, independently validated checkpoint before treating the prototype output as a weather prediction.
+
+
+## Mobile companion
+
+A separate Expo TypeScript app lives in [`mobile/`](./mobile/). It has a native overview, location-aware forecast, live USGS hazards, marine metrics, an interactive full-screen 3D/2D map, and responsive WebViews for the remaining desktop features. Use the [mobile setup guide](./mobile/README.md) for Expo Go, LAN/tunnel URL configuration, Android APK builds, and iOS signing steps. The mobile app requests foreground location only and falls back to Jakarta if permission is unavailable.

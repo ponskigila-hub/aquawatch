@@ -47,14 +47,15 @@ interface RiskGlobeProps {
   onSelectLocation: (city: CitySearchResult, kind: GlobeSearchKind) => void;
   onResetSearch: () => void;
   onDeepZoom?: (lat: number, lng: number) => void;
+  fullHeight?: boolean;
 }
 
-export const RiskGlobe = ({ searchedCity, searchedIsCountry = false, defaultCenter, regionWeather, regionLabel = 'Jakarta, Indonesia', onSelectLocation, onResetSearch, onDeepZoom }: RiskGlobeProps) => {
+export const RiskGlobe = ({ searchedCity, searchedIsCountry = false, defaultCenter, regionWeather, regionLabel = 'Jakarta, Indonesia', onSelectLocation, onResetSearch, onDeepZoom, fullHeight = false }: RiskGlobeProps) => {
   const globeRef = useRef<GlobeMethods | undefined>(undefined);
   const containerRef = useRef<HTMLDivElement>(null);
   const defaultCenterLat = defaultCenter?.lat;
   const defaultCenterLng = defaultCenter?.lng;
-  const [dimensions, setDimensions] = useState({ width: 300, height: 460 });
+  const [dimensions, setDimensions] = useState({ width: 300, height: fullHeight && typeof window !== 'undefined' ? window.innerHeight : 460 });
   const [ready, setReady] = useState(false);
   const [selected, setSelected] = useState<GlobePoint | null>(null);
   const hasTriggeredDeepZoom = useRef(false);
@@ -103,13 +104,13 @@ export const RiskGlobe = ({ searchedCity, searchedIsCountry = false, defaultCent
     const updateSize = () => {
       if (!containerRef.current) return;
       const { width } = containerRef.current.getBoundingClientRect();
-      const height = window.innerWidth < 640 ? 340 : window.innerWidth < 1024 ? 420 : 500;
+      const height = fullHeight ? window.innerHeight : window.innerWidth < 640 ? 340 : window.innerWidth < 1024 ? 420 : 500;
       setDimensions({ width, height });
     };
     updateSize();
     window.addEventListener('resize', updateSize);
     return () => window.removeEventListener('resize', updateSize);
-  }, []);
+  }, [fullHeight]);
 
   useEffect(() => {
     if (!globeRef.current) return;

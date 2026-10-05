@@ -27,6 +27,7 @@ interface RiskMap2DProps {
   initialCenter?: { lat: number; lng: number } | null;
   regionWeather?: LiveRegionWeather;
   regionLabel?: string;
+  fullHeight?: boolean;
 }
 
 type SelectedMapPoint =
@@ -61,11 +62,11 @@ const areaPopup = (area: LiveAreaWeather) => `
     <span style="display:inline-block;margin-top:6px;border-radius:999px;padding:1px 8px;background:${riskColors[area.riskLevel]};color:white;font-size:11px">${area.riskLevel === 'safe' ? 'Low rain' : area.riskLevel === 'medium' ? 'Rain watch' : 'Heavy rain'}</span>
   </div>`;
 
-export const RiskMap2D = ({ searchedCity, initialCenter, regionWeather, regionLabel = 'Jakarta, Indonesia' }: RiskMap2DProps) => {
+export const RiskMap2D = ({ searchedCity, initialCenter, regionWeather, regionLabel = 'Jakarta, Indonesia', fullHeight = false }: RiskMap2DProps) => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<L.Map | null>(null);
   const searchedMarkerRef = useRef<L.CircleMarker | null>(null);
-  const [height, setHeight] = useState(420);
+  const [height, setHeight] = useState(fullHeight && typeof window !== 'undefined' ? window.innerHeight : 420);
   const [selected, setSelected] = useState<SelectedMapPoint | null>(null);
   const { data: globalCities = [], isLoading: globalLoading } = useGlobalCityWeather();
   const { data: disasterEvents = [], isLoading: eventsLoading } = useQuery({
@@ -86,11 +87,11 @@ export const RiskMap2D = ({ searchedCity, initialCenter, regionWeather, regionLa
   });
 
   useEffect(() => {
-    const updateHeight = () => setHeight(window.innerWidth < 640 ? 340 : window.innerWidth < 1024 ? 420 : 500);
+    const updateHeight = () => setHeight(fullHeight ? window.innerHeight : window.innerWidth < 640 ? 340 : window.innerWidth < 1024 ? 420 : 500);
     updateHeight();
     window.addEventListener('resize', updateHeight);
     return () => window.removeEventListener('resize', updateHeight);
-  }, []);
+  }, [fullHeight]);
 
   useEffect(() => {
     if (!map.current) return;

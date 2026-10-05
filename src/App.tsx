@@ -9,6 +9,7 @@ import { UserLocationProvider } from '@/hooks/useUserLocation';
 import Index from './pages/Index';
 import DistrictDetail from './pages/DistrictDetail';
 import NotFound from './pages/NotFound';
+import MobileMapPage from './pages/MobileMapPage';
 
 const ForecastPage = lazy(() => import('./pages/ForecastPage'));
 const CommunityPage = lazy(() => import('./pages/CommunityPage'));
@@ -29,6 +30,7 @@ const App = () => (
           <BrowserRouter>
             <Routes>
             <Route path="/" element={<Index />} />
+            <Route path="/mobile-map" element={<MobileMapPage />} />
             <Route path="/forecast" element={<Suspense fallback={<main className="container mx-auto p-8 text-sm text-muted-foreground">Loading forecast…</main>}><ForecastPage /></Suspense>} />
             <Route path="/community" element={<Suspense fallback={<main className="container mx-auto p-8 text-sm text-muted-foreground">Loading community tools…</main>}><CommunityPage /></Suspense>} />
             <Route path="/tools" element={<Suspense fallback={<main className="container mx-auto p-8 text-sm text-muted-foreground">Loading map tools…</main>}><ToolsPage /></Suspense>} />
