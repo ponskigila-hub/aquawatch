@@ -20,14 +20,14 @@ import { colors, type ScreenKey } from './src/theme';
 const API_STORAGE_KEY = '@aquawatch/mobile-api-url';
 const WEB_STORAGE_KEY = '@aquawatch/mobile-web-url';
 const titles: Record<ScreenKey, string> = {
-  overview: 'Overview', map: 'Global map', forecast: 'Forecast', hazards: 'Hazards', 'hazards-web': 'Hazard map', ocean: 'Ocean', 'ocean-web': 'Ocean explorer', more: 'More features',
+  overview: 'Overview', map: 'Global map', forecast: 'Forecast', hazards: 'Nearby hazards', 'hazards-web': 'Hazard map', ocean: 'Ocean', 'ocean-web': 'Ocean explorer', more: 'More features',
   'air-quality': 'Air quality', history: 'History & climate', community: 'Community', tools: 'Data tools',
 };
 const tabs: Array<{ key: ScreenKey; label: string; icon: React.ComponentProps<typeof Ionicons>['name'] }> = [
   { key: 'overview', label: 'Overview', icon: 'home-outline' },
   { key: 'map', label: 'Map', icon: 'globe-outline' },
   { key: 'forecast', label: 'Forecast', icon: 'cloudy-outline' },
-  { key: 'ocean', label: 'Ocean', icon: 'water-outline' },
+  { key: 'hazards', label: 'Hazards', icon: 'warning-outline' },
   { key: 'more', label: 'More', icon: 'grid-outline' },
 ];
 
@@ -58,13 +58,13 @@ function AppShell() {
     await AsyncStorage.multiSet([[API_STORAGE_KEY, nextApi], [WEB_STORAGE_KEY, nextWeb]]);
     setApiBaseUrl(nextApi); setApiUrl(nextApi); setWebUrl(nextWeb);
   };
-  const currentTab = ['air-quality', 'history', 'community', 'tools', 'hazards', 'hazards-web'].includes(screen) ? 'more' : screen === 'ocean-web' ? 'ocean' : screen;
+  const currentTab = ['air-quality', 'history', 'community', 'tools', 'ocean', 'ocean-web', 'hazards-web'].includes(screen) ? 'more' : screen;
 
   let content;
   if (screen === 'overview') content = <OverviewScreen location={location} locationLabel={locationLabel} onOpenMap={() => setScreen('map')} />;
   else if (screen === 'map') content = <MapScreen location={location} locationLabel={locationLabel} webUrl={configReady ? webUrl : ''} />;
   else if (screen === 'forecast') content = <ForecastScreen location={location} locationLabel={locationLabel} />;
-  else if (screen === 'hazards') content = <HazardsScreen onOpenFull={() => setScreen('hazards-web')} />;
+  else if (screen === 'hazards') content = <HazardsScreen location={location} locationLabel={locationLabel} onOpenFull={() => setScreen('hazards-web')} />;
   else if (screen === 'ocean') content = <OceanScreen location={location} onOpenFull={() => setScreen('ocean-web')} />;
   else if (screen === 'ocean-web') content = <WebRouteScreen route="ocean" baseUrl={webUrl} location={location} />;
   else if (screen === 'more') content = <MoreScreen apiUrl={apiUrl} webUrl={webUrl} onSave={saveSettings} onNavigate={(next) => setScreen(next)} />;

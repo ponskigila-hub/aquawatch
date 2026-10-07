@@ -25,12 +25,35 @@ export interface WeatherHour {
   weatherCode: number | null;
   windKph: number | null;
   humidity: number | null;
+  cloudCoverPct: number | null;
+  uvIndex: number | null;
+}
+export interface WeatherDay {
+  date: string;
+  highC: number | null;
+  lowC: number | null;
+  rainMm: number | null;
+  rainChance: number | null;
+  weatherCode: number | null;
+  sunrise: string | null;
+  sunset: string | null;
+  daylightSeconds: number | null;
+  sunshineSeconds: number | null;
+  uvMax: number | null;
 }
 export interface WeatherSnapshot {
+  time: string | null;
   temperatureC: number | null;
   feelsLikeC: number | null;
   humidity: number | null;
   windKph: number | null;
+  windDirectionDeg: number | null;
+  windGustKph: number | null;
+  cloudCoverPct: number | null;
+  visibilityKm: number | null;
+  pressureMb: number | null;
+  uvIndex: number | null;
+  dewPointC: number | null;
   precipitationMm: number | null;
   weatherCode: number | null;
   highC: number | null;
@@ -38,9 +61,38 @@ export interface WeatherSnapshot {
   rainChance: number | null;
   rainTodayMm: number | null;
   hourly: WeatherHour[];
-  daily: Array<{ date: string; highC: number | null; lowC: number | null; rainMm: number | null; rainChance: number | null; weatherCode: number | null }>;
+  daily: WeatherDay[];
 }
-export interface Earthquake { id: string; place: string; magnitude: number; depthKm: number; occurredAt: string; url: string; }
+export interface AirQualitySnapshot {
+  time: string | null;
+  usAqi: number | null;
+  europeanAqi: number | null;
+  pm25: number | null;
+  pm10: number | null;
+  nitrogenDioxide: number | null;
+}
+export interface Earthquake {
+  id: string;
+  place: string;
+  magnitude: number;
+  depthKm: number;
+  occurredAt: string;
+  url: string;
+  latitude?: number;
+  longitude?: number;
+  distanceKm?: number;
+  tsunamiRelated?: boolean;
+}
+export interface NearbyEonetEvent {
+  id: string;
+  title: string;
+  category: string;
+  latitude: number;
+  longitude: number;
+  distanceKm: number;
+  occurredAt: string;
+  url: string;
+}
 export interface MarineSnapshot {
   time: string;
   waveHeightM: number | null;

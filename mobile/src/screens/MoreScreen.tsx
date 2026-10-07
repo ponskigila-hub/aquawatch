@@ -7,7 +7,7 @@ import { colors, type ScreenKey } from '../theme';
 import { Panel } from '../components/Ui';
 
 const features: Array<{ key: ScreenKey; title: string; detail: string; icon: React.ComponentProps<typeof Ionicons>['name'] }> = [
-  { key: 'hazards', title: 'Hazards', detail: 'USGS earthquakes and reported event map', icon: 'warning-outline' },
+  { key: 'ocean', title: 'Ocean', detail: 'Local marine metrics and the interactive ocean explorer', icon: 'water-outline' },
   { key: 'air-quality', title: 'Air quality', detail: 'Global air metrics and source notes', icon: 'leaf-outline' },
   { key: 'history', title: 'History & climate', detail: 'Historical archive and climate baseline', icon: 'time-outline' },
   { key: 'community', title: 'Community', detail: 'Local reports and personal risk thresholds', icon: 'people-outline' },
