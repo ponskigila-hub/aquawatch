@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
+import * as Updates from 'expo-updates';
+import Constants from 'expo-constants';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -13,6 +15,7 @@ import { OceanScreen } from './src/screens/OceanScreen';
 import { MoreScreen } from './src/screens/MoreScreen';
 import { MapScreen } from './src/screens/MapScreen';
 import { WebRouteScreen } from './src/screens/WebRouteScreen';
+import { AppUpdateBanner } from './src/components/AppUpdateBanner';
 import { useDeviceLocation } from './src/hooks/useDeviceLocation';
 import { envApiBaseUrl, envWebAppBaseUrl, setApiBaseUrl, normalizeBaseUrl } from './src/services/api';
 import { colors, type ScreenKey } from './src/theme';
@@ -37,6 +40,11 @@ function AppShell() {
   const [apiUrl, setApiUrl] = useState(envApiBaseUrl);
   const [webUrl, setWebUrl] = useState(envWebAppBaseUrl);
   const [configReady, setConfigReady] = useState(false);
+  const [updateCheckBusy, setUpdateCheckBusy] = useState(false);
+  const [updateFeedback, setUpdateFeedback] = useState('');
+  const [updateDismissed, setUpdateDismissed] = useState(false);
+  const updates = Updates.useUpdates();
+  const updatesConfigured = Boolean(Constants.expoConfig?.updates?.url);
 
   useEffect(() => {
     let active = true;
@@ -58,6 +66,58 @@ function AppShell() {
     await AsyncStorage.multiSet([[API_STORAGE_KEY, nextApi], [WEB_STORAGE_KEY, nextWeb]]);
     setApiBaseUrl(nextApi); setApiUrl(nextApi); setWebUrl(nextWeb);
   };
+  const checkForUpdates = async () => {
+    setUpdateDismissed(false);
+    if (!Updates.isEnabled || !updatesConfigured) {
+      setUpdateFeedback('OTA updates are not enabled in this session. Install an EAS preview or release build after EAS Update is configured.');
+      return;
+    }
+    if (updateCheckBusy || updates.isChecking || updates.isDownloading) return;
+    setUpdateCheckBusy(true);
+    setUpdateFeedback('Checking for updates…');
+    try {
+      const result = await Updates.checkForUpdateAsync();
+      if (!result.isAvailable) {
+        setUpdateFeedback('AuraGuard is up to date.');
+        return;
+      }
+      setUpdateFeedback('Update found. Downloading now…');
+      const fetched = await Updates.fetchUpdateAsync();
+      if (!fetched.isNew) setUpdateFeedback('AuraGuard is up to date.');
+    } catch {
+      setUpdateFeedback('Could not check for updates. Check the internet connection and EAS update channel.');
+    } finally {
+      setUpdateCheckBusy(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!Updates.isEnabled || !updatesConfigured || !updates.isUpdatePending) return;
+    setUpdateDismissed(false);
+    setUpdateFeedback('Update downloaded. Restarting AuraGuard…');
+    const timer = setTimeout(() => {
+      void Updates.reloadAsync().catch(() => setUpdateFeedback('Update downloaded. Close and reopen AuraGuard to apply it.'));
+    }, 900);
+    return () => clearTimeout(timer);
+  }, [updates.isUpdatePending, updatesConfigured]);
+
+  useEffect(() => {
+    if (updates.isDownloading || updates.isUpdatePending || updates.isRestarting) setUpdateDismissed(false);
+  }, [updates.isDownloading, updates.isUpdatePending, updates.isRestarting]);
+
+  const updateBusy = updateCheckBusy || updates.isChecking || updates.isDownloading || updates.isRestarting;
+  const updateError = updates.downloadError || updates.checkError;
+  const updateStatus = updates.isRestarting
+    ? 'Restarting AuraGuard to finish the update…'
+    : updates.isDownloading
+      ? 'Downloading AuraGuard update…'
+      : updates.isUpdatePending
+        ? 'Update downloaded. Restarting AuraGuard…'
+        : updates.isChecking || updateCheckBusy
+          ? 'Checking for updates…'
+          : updates.isUpdateAvailable
+            ? 'Update found. Preparing download…'
+            : updateFeedback || (updateError ? 'Update unavailable. Check the connection and EAS update channel.' : '');
   const currentTab = ['air-quality', 'history', 'community', 'tools', 'ocean', 'ocean-web', 'hazards-web'].includes(screen) ? 'more' : screen;
 
   let content;
@@ -67,7 +127,7 @@ function AppShell() {
   else if (screen === 'hazards') content = <HazardsScreen location={location} locationLabel={locationLabel} onOpenFull={() => setScreen('hazards-web')} />;
   else if (screen === 'ocean') content = <OceanScreen location={location} onOpenFull={() => setScreen('ocean-web')} />;
   else if (screen === 'ocean-web') content = <WebRouteScreen route="ocean" baseUrl={webUrl} location={location} />;
-  else if (screen === 'more') content = <MoreScreen apiUrl={apiUrl} webUrl={webUrl} onSave={saveSettings} onNavigate={(next) => setScreen(next)} />;
+  else if (screen === 'more') content = <MoreScreen apiUrl={apiUrl} webUrl={webUrl} onSave={saveSettings} onNavigate={(next) => setScreen(next)} updatesEnabled={Updates.isEnabled && updatesConfigured} updateBusy={updateBusy} updateStatus={updateStatus} onCheckUpdates={() => void checkForUpdates()} />;
   else if (screen === 'hazards-web') content = <WebRouteScreen route="hazards" baseUrl={webUrl} location={location} />;
   else content = <WebRouteScreen route={screen} baseUrl={webUrl} location={location} />;
 
@@ -75,9 +135,10 @@ function AppShell() {
     <StatusBar style="light" />
     <View style={styles.header}>
       <View style={styles.brandMark}><Ionicons name="water" color={colors.deep} size={20} /></View>
-      <View style={{ flex: 1 }}><Text style={styles.brand}>AquaWatch</Text><Text style={styles.tagline}>{titles[screen] ?? 'Global environmental monitoring'}</Text></View>
+      <View style={{ flex: 1 }}><Text style={styles.brand}>AuraGuard</Text><Text style={styles.tagline}>{titles[screen] ?? 'Global environmental monitoring'}</Text></View>
       <Pressable accessibilityLabel="Refresh device location" onPress={() => void requestLocation()} style={styles.locationPill}><Ionicons name={usingDeviceLocation ? 'navigate' : 'location-outline'} size={13} color={usingDeviceLocation ? colors.green : colors.amber} /><Text numberOfLines={1} style={styles.locationPillText}>{status === 'loading' ? 'Locating' : usingDeviceLocation ? 'Near me' : 'Jakarta'}</Text></Pressable>
     </View>
+    {updateStatus && (!updateDismissed || updateBusy) ? <AppUpdateBanner message={updateStatus} progress={updates.downloadProgress ?? null} isDownloading={updates.isDownloading} onDismiss={() => { setUpdateFeedback(''); setUpdateDismissed(true); }} /> : null}
     <View style={styles.body}>
       {!configReady && screen !== 'overview' && screen !== 'forecast' && screen !== 'hazards' && screen !== 'ocean' ? <View style={styles.configWait}><ActivityIndicator color={colors.maya} /><Text style={styles.helper}>Loading connection settings…</Text></View> : content}
     </View>

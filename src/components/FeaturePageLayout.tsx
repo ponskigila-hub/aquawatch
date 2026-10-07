@@ -19,7 +19,7 @@ export const FeaturePageLayout = ({ eyebrow, title, description, children, updat
       <div className="container mx-auto flex items-center justify-between gap-3 px-4 py-3">
         <Link to="/" className="flex min-w-0 items-center gap-2.5 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-accent text-primary-foreground"><Waves className="h-5 w-5" /></span>
-          <span className="min-w-0"><span className="block truncate text-sm font-bold">AquaWatch</span><span className="hidden text-[11px] text-muted-foreground sm:block">Global flood · marine · rainfall risk</span></span>
+          <span className="min-w-0"><span className="block truncate text-sm font-bold">AuraGuard</span><span className="hidden text-[11px] text-muted-foreground sm:block">Global flood · marine · rainfall risk</span></span>
         </Link>
         <div className="flex items-center gap-1 sm:gap-2"><span className="hidden text-xs text-muted-foreground lg:inline">{updatedAt ?? 'Live sources · varies by layer'}</span><UserLocationIndicator /><ThemeToggle /></div>
       </div>
@@ -33,6 +33,6 @@ export const FeaturePageLayout = ({ eyebrow, title, description, children, updat
       </div>
       {children}
     </main>
-    <footer className="mt-10 border-t bg-card/50 py-5 text-center text-xs text-muted-foreground">AquaWatch · Data timing and coverage vary by source · Not an official emergency-warning service</footer>
+    <footer className="mt-10 border-t bg-card/50 py-5 text-center text-xs text-muted-foreground">AuraGuard · Data timing and coverage vary by source · Not an official emergency-warning service</footer>
   </div>
 );

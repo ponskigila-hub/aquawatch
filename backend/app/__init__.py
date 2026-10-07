@@ -1,1 +1,1 @@
-"""AquaWatch FastAPI backend package."""
+"""AuraGuard FastAPI backend package."""

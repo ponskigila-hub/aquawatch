@@ -40,7 +40,7 @@ allowed_origins = [
 ]
 
 app = FastAPI(
-    title="AquaWatch Forecast API",
+    title="AuraGuard Forecast API",
     version="0.1.0",
     description="Prototype spatial raster inference endpoint. Forecast head requires task-specific training for operational use.",
 )
@@ -75,7 +75,7 @@ def make_demo_field(bbox: BoundingBox, width: int, height: int, horizon_hours: i
 
 @app.get("/health")
 def health() -> dict[str, str]:
-    return {"status": "ok", "service": "aquawatch-forecast"}
+    return {"status": "ok", "service": "auraguard-forecast"}
 
 
 @app.get("/api/hazards/fires")
@@ -94,7 +94,7 @@ def recent_thermal_detections(days: int = Query(default=1, ge=1, le=5)) -> dict[
 
     # FIRMS places the key in the upstream path; it is only used by this server.
     url = f"https://firms.modaps.eosdis.nasa.gov/api/area/csv/{map_key}/{source}/world/{days}"
-    request = Request(url, headers={"Accept": "text/csv", "User-Agent": "AquaWatch environmental dashboard"})
+    request = Request(url, headers={"Accept": "text/csv", "User-Agent": "AuraGuard environmental dashboard"})
     try:
         with urlopen(request, timeout=25) as response:
             csv_text = response.read(12_000_000).decode("utf-8-sig", errors="replace")
@@ -154,7 +154,7 @@ _OISST_CACHE_LOCK = threading.Lock()
 
 
 def _oisst_latest_timestamp() -> datetime:
-    request = Request(_OISST_BASE + ".das", headers={"User-Agent": "AquaWatch environmental dashboard"})
+    request = Request(_OISST_BASE + ".das", headers={"User-Agent": "AuraGuard environmental dashboard"})
     with urlopen(request, timeout=20) as response:
         metadata = response.read(1_000_000).decode("latin-1", errors="replace")
     match = re.search(r'time_coverage_end\s+"([^"]+)"', metadata)
@@ -180,7 +180,7 @@ def _fetch_oisst_cell(location: tuple[float, float], timestamp: datetime) -> dic
     constraint = f"[({time_value})][(0.0)][({grid_lat})][({grid_lon})]"
     query = f"sst{constraint},anom{constraint}"
     url = _OISST_BASE + ".csv?" + quote(query, safe="():,.T-Z")
-    request = Request(url, headers={"Accept": "text/csv", "User-Agent": "AquaWatch environmental dashboard"})
+    request = Request(url, headers={"Accept": "text/csv", "User-Agent": "AuraGuard environmental dashboard"})
     with urlopen(request, timeout=20) as response:
         text = response.read(16_000).decode("utf-8", errors="replace")
     rows = list(csv.reader(io.StringIO(text)))
@@ -264,7 +264,7 @@ def _fetch_oisst_grid(variable: str, timestamp: datetime) -> np.ndarray:
     query = f"{variable}[({time_value})][(0.0)][(-89.875):(89.875)][(-179.875):(179.875)]"
     request = Request(
         _OISST_BASE + ".csv?" + quote(query, safe="():,.T-Z"),
-        headers={"Accept": "text/csv", "User-Agent": "AquaWatch environmental dashboard"},
+        headers={"Accept": "text/csv", "User-Agent": "AuraGuard environmental dashboard"},
     )
     grid = np.full(_OISST_GRID_SHAPE, np.nan, dtype=np.float32)
     with urlopen(request, timeout=90) as response:

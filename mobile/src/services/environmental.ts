@@ -320,7 +320,7 @@ export async function checkBackend() {
   if (!api.defaults.baseURL) return { online: false, message: 'Set an API URL in More → Backend settings.' };
   try {
     const { data } = await api.get('/health');
-    return { online: data.status === 'ok', message: data.status === 'ok' ? 'Connected to AquaWatch API' : 'API responded unexpectedly' };
+    return { online: data.status === 'ok', message: data.status === 'ok' ? 'Connected to AuraGuard API' : 'API responded unexpectedly' };
   } catch (error) {
     const message = axios.isAxiosError(error) && error.response?.status
       ? `API returned HTTP ${error.response.status}`

@@ -1,8 +1,8 @@
-# AquaWatch
+# AuraGuard
 
 **Global Flood, Marine & Rainfall Risk Monitoring**
 
-AquaWatch is a global environmental-monitoring dashboard built with React, TypeScript, a 3D WebGL globe, and interactive 2D maps. It brings together public weather and environmental feeds in a user-friendly interface. The FastAPI/PyTorch forecasting endpoint is a **prototype only**; its current prediction head is not trained on weather observations and must not be used as an operational forecast or warning.
+AuraGuard is a global environmental-monitoring dashboard built with React, TypeScript, a 3D WebGL globe, and interactive 2D maps. It brings together public weather and environmental feeds in a user-friendly interface. The FastAPI/PyTorch forecasting endpoint is a **prototype only**; its current prediction head is not trained on weather observations and must not be used as an operational forecast or warning.
 
 ## Explore the platform
 
@@ -29,11 +29,11 @@ Additional sources, fields, update timing, and known limitations are documented 
 - USGS earthquake records and NASA EONET events are distinct observations/catalog entries. An earthquake's tsunami flag does not replace an official tsunami advisory.
 - NASA FIRMS access requires an API key configured only on the backend; thermal detections are not proof of a confirmed wildfire.
 - Community pins remain on the current device/browser. They are unverified and are not transmitted to a central alert service.
-- AquaWatch is for general awareness and research exploration. It is not an emergency-response service; follow local authorities for safety-critical decisions.
+- AuraGuard is for general awareness and research exploration. It is not an emergency-response service; follow local authorities for safety-critical decisions.
 
 ## Location defaults and privacy
 
-On first load, AquaWatch requests the browser's location permission. When allowed, the position is used as the starting area across Overview, Forecast, Hazards, Air quality, Ocean, History & climate, Community, and Data tools; a manual search or map pin can override it. If permission is denied or unavailable, the app uses its Jakarta fallback and exposes a location-status/retry control. Automatic device coordinates stay in the app's in-memory session state; selected weather or marine requests send coordinates to their configured public data sources. Community watches and observations are stored locally only when you choose to save them.
+On first load, AuraGuard requests the browser's location permission. When allowed, the position is used as the starting area across Overview, Forecast, Hazards, Air quality, Ocean, History & climate, Community, and Data tools; a manual search or map pin can override it. If permission is denied or unavailable, the app uses its Jakarta fallback and exposes a location-status/retry control. Automatic device coordinates stay in the app's in-memory session state; selected weather or marine requests send coordinates to their configured public data sources. Community watches and observations are stored locally only when you choose to save them.
 
 ## Visual palette
 
@@ -86,4 +86,4 @@ The ResNet18 ImageNet weights initialize the current encoder, but the precipitat
 
 ## Mobile companion
 
-A separate Expo TypeScript app lives in [`mobile/`](./mobile/). Its native weather screens show cloud cover, visibility, humidity, pressure, wind and gusts, UV, dew point, precipitation and a live modeled AQI, with Now/Hourly/Daily/Sun & Moon forecast tabs. The main navigation prioritizes nearby hazards: USGS earthquakes within 500 km, catalog tsunami-related flags, and NASA EONET floods, storms, fires, volcanoes and landslides when active and nearby. Its default 2D map uses OpenStreetMap tiles and nearby event markers without requiring the local dashboard URL; the optional 3D globe and remaining desktop pages still use responsive WebViews. Use the [mobile setup guide](./mobile/README.md) for Expo Go, LAN/tunnel URL configuration, Android APK builds, and iOS signing steps. The mobile app requests foreground location only and falls back to Jakarta if permission is unavailable.
+A separate AuraGuard Expo TypeScript app lives in [`mobile/`](./mobile/). Its native weather screens show cloud cover, visibility, humidity, pressure, wind and gusts, UV, dew point, precipitation and a live modeled AQI, with Now/Hourly/Daily/Sun & Moon forecast tabs. The main navigation prioritizes nearby hazards: USGS earthquakes within 500 km, catalog tsunami-related flags, and NASA EONET floods, storms, fires, volcanoes and landslides when active and nearby. Its default 2D map uses OpenStreetMap tiles and nearby event markers without requiring the local dashboard URL; the optional 3D globe and remaining desktop pages still use responsive WebViews. The app reports OTA update progress and restarts after a compatible EAS Update download. Use the [mobile setup guide](./mobile/README.md) for Expo Go, LAN/tunnel URL configuration, Android APK builds, EAS Update setup, and iOS signing steps. The mobile app requests foreground location only and falls back to Jakarta if permission is unavailable.

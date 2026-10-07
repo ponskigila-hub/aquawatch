@@ -1,6 +1,6 @@
-# AquaWatch Mobile (Expo)
+# AuraGuard Mobile (Expo)
 
-A mobile-first Expo companion for the existing AquaWatch web dashboard and FastAPI backend. Native weather screens include cloud cover, visibility, humidity, pressure, wind direction/speed, gusts, UV, dew point, precipitation, modeled AQI and pollutant samples. Forecast sections are Now, Hourly, Daily, and Sun & Moon. The primary hazard screen shows nearby USGS earthquakes and tsunami-related catalogue flags plus nearby open NASA EONET events, including landslides when catalogued. The default interactive 2D map uses OpenStreetMap and nearby risk markers without depending on the local dashboard URL; the optional 3D globe and full feature pages still use responsive WebViews.
+A mobile-first Expo companion for the AuraGuard web dashboard and FastAPI backend. Native weather screens include cloud cover, visibility, humidity, pressure, wind direction/speed, gusts, UV, dew point, precipitation, modeled AQI and pollutant samples. Forecast sections are Now, Hourly, Daily, and Sun & Moon. The primary hazard screen shows nearby USGS earthquakes and tsunami-related catalogue flags plus nearby open NASA EONET events, including landslides when catalogued. The default interactive 2D map uses OpenStreetMap and nearby risk markers without depending on the local dashboard URL; the optional 3D globe and full feature pages still use responsive WebViews.
 
 ## Requirements
 
@@ -60,6 +60,7 @@ Sign in once with Expo, then configure this project on the EAS account:
 ```bash
 npx eas-cli login
 npx eas-cli build:configure
+npx eas-cli update:configure
 ```
 
 EAS's Android preview profile creates an installable APK (not the Play Store AAB):
@@ -68,7 +69,19 @@ EAS's Android preview profile creates an installable APK (not the Play Store AAB
 npx eas-cli build -p android --profile preview
 ```
 
-The build URL can be opened on an Android device to install the APK. The first `build:configure` run links this app to your Expo account and writes the account-specific EAS project ID into the app configuration.
+The build URL can be opened on an Android device to install the APK. EAS setup links the app to your Expo account and adds its account-specific project ID and update URL to the app configuration; it also maps the preview/production build channels. This project does not yet contain a real EAS project ID, so run these commands while signed into the Expo account that should own AuraGuard. After enabling EAS Update, create and install a fresh build because `expo-updates` is a native module included in the binary.
+
+## In-app updates (EAS Update)
+
+AuraGuard checks its configured EAS Update channel on launch. The global in-app status strip reports checking/downloading/restarting, and displays the download percentage when Expo's server supplies transfer-size information. **More → App updates → Check for updates** can start a manual check; when an update finishes downloading, AuraGuard reloads to apply it. The same state is visible from every mobile tab.
+
+To publish JavaScript, styling, or asset changes to an installed preview APK:
+
+```bash
+npx eas-cli update --channel preview --message "Describe the change"
+```
+
+OTA updates require a linked EAS project (`updates.url` and project ID) plus a newly built EAS APK/IPA containing `expo-updates`. Expo Go and Metro development mode cannot fully exercise the native update API. Changes to native code, permissions, dependencies, or Expo SDK require a new EAS build rather than OTA. Keep the app's `version` unchanged for OTA-compatible code; bump it when shipping a new native runtime.
 
 For iOS, use a registered-device internal build or a development client as appropriate to the Apple signing setup:
 
@@ -82,7 +95,7 @@ An iOS device install requires Apple's signing/provisioning setup through EAS. A
 
 ## Dependency audit note
 
-At verification after aligning Expo to `~57.0.27`, `npm audit` reported 19 high and 8 moderate advisories in the mobile dependency tree. I did not apply automated breaking downgrades that would de-align Expo/React Native from SDK 57. Review the current advisory paths and resolve them with compatible SDK updates before any public or production release.
+At verification after adding `expo-updates` and `expo-constants` for SDK 57, `npm audit` reported 20 high and 8 moderate advisories in the mobile dependency tree. I did not apply automated breaking downgrades that would de-align Expo/React Native from SDK 57. Review the current advisory paths and resolve them with compatible SDK updates before any public or production release.
 
 ## What the app requests / data boundaries
 
@@ -106,4 +119,6 @@ Soft Periwinkle `#A682FF`, Medium Slate Blue `#715AFF`, Cornflower Blue `#5887FF
 - [Expo APK builds](https://docs.expo.dev/build-reference/apk/)
 - [Expo build properties](https://docs.expo.dev/versions/latest/sdk/build-properties/)
 - [Expo splash screen configuration](https://docs.expo.dev/versions/latest/sdk/splash-screen/)
+- [Expo Updates SDK](https://docs.expo.dev/versions/v57.0.0/sdk/updates/)
+- [EAS Update setup](https://docs.expo.dev/eas-update/getting-started/)
 - [React Native WebView reference](https://github.com/react-native-webview/react-native-webview/blob/master/docs/Reference.md)

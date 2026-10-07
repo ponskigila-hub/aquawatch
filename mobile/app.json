@@ -1,9 +1,18 @@
 {
   "expo": {
-    "name": "AquaWatch",
+    "name": "AuraGuard",
+    "description": "Personal weather and environmental risk monitoring.",
     "slug": "aquawatch-mobile",
     "scheme": "aquawatch",
     "version": "1.0.0",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "enabled": true,
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0
+    },
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
     "icon": "./assets/icon.png",
@@ -11,8 +20,8 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.aquawatch.monitor",
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "AquaWatch uses your location to show nearby weather and center the environmental map while the app is open.",
-        "NSLocalNetworkUsageDescription": "AquaWatch connects to your own development computer when you configure a local API or dashboard address.",
+        "NSLocationWhenInUseUsageDescription": "AuraGuard uses your location to show nearby weather and center the environmental map while the app is open.",
+        "NSLocalNetworkUsageDescription": "AuraGuard connects to your own development computer when you configure a local API or dashboard address.",
         "NSAppTransportSecurity": {
           "NSAllowsLocalNetworking": true
         }
@@ -36,9 +45,10 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Allow AquaWatch to use your location for nearby weather and map centering."
+          "locationWhenInUsePermission": "Allow AuraGuard to use your location for nearby weather and map centering."
         }
       ],
+      "expo-updates",
       "expo-font",
       [
         "expo-build-properties",

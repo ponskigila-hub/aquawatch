@@ -1,4 +1,4 @@
-# AquaWatch Forecast Backend
+# AuraGuard Forecast Backend
 
 FastAPI + PyTorch prototype that accepts a WGS84 bounding box and optional row-major raster, runs a ResNet18-based dense inference model, and returns a GeoJSON `FeatureCollection` plus `prediction_matrix`.
 

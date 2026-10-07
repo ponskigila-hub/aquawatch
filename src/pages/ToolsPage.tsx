@@ -91,17 +91,17 @@ const ToolsPage = () => {
     setExportError('');
     const featureCollection = {
       type: 'FeatureCollection',
-      name: 'AquaWatch environmental points',
+      name: 'AuraGuard environmental points',
       bbox: [bounds.west, bounds.south, bounds.east, bounds.north],
       source_note: 'Point features only. This download does not include a gridded satellite or forecast raster.',
       features: exportPoints.map((point) => ({ type: 'Feature', id: point.id, geometry: { type: 'Point', coordinates: [point.lng, point.lat] }, properties: { ...point } })),
     };
-    saveJson('aquawatch-environmental-points.geojson', featureCollection);
+    saveJson('auraguard-environmental-points.geojson', featureCollection);
   };
   const exportCsv = () => {
     if (!exportPoints.length) { setExportError('There are no selected points to export.'); return; }
     setExportError('');
-    saveCsv('aquawatch-environmental-points.csv', [['id', 'latitude', 'longitude', 'name', 'category', 'date', 'details', 'source'], ...exportPoints.map((point) => [point.id, String(point.lat), String(point.lng), point.label, point.category, point.date, point.note ?? '', point.source])]);
+    saveCsv('auraguard-environmental-points.csv', [['id', 'latitude', 'longitude', 'name', 'category', 'date', 'details', 'source'], ...exportPoints.map((point) => [point.id, String(point.lat), String(point.lng), point.label, point.category, point.date, point.note ?? '', point.source])]);
   };
 
   const recordOrbit = () => {
@@ -124,7 +124,7 @@ const ToolsPage = () => {
       stream.getTracks().forEach((track) => track.stop()); setRecording(false);
       const blob = new Blob(chunks, { type: 'video/webm' });
       const href = URL.createObjectURL(blob); const anchor = document.createElement('a');
-      anchor.href = href; anchor.download = `aquawatch-orbit-${new Date().toISOString().slice(0, 10)}.webm`; anchor.click();
+      anchor.href = href; anchor.download = `auraguard-orbit-${new Date().toISOString().slice(0, 10)}.webm`; anchor.click();
       window.setTimeout(() => URL.revokeObjectURL(href), 30_000);
       globeRef.current?.setView({ lat: center.lat, lng: center.lng, altitude: 1.8 }, 800);
     };

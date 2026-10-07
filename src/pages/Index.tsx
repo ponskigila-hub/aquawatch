@@ -71,7 +71,7 @@ const Index = () => {
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
               <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center shrink-0 shadow-sm"><Waves className="w-4 h-4 sm:w-5 sm:h-5 text-primary-foreground" /></div>
-              <div className="min-w-0"><h1 className="text-base sm:text-2xl font-bold leading-tight truncate">AquaWatch</h1><p className="text-xs sm:text-sm text-muted-foreground hidden sm:block">Global flood &amp; rainfall risk monitoring</p></div>
+              <div className="min-w-0"><h1 className="text-base sm:text-2xl font-bold leading-tight truncate">AuraGuard</h1><p className="text-xs sm:text-sm text-muted-foreground hidden sm:block">Global flood &amp; rainfall risk monitoring</p></div>
             </div>
             <div className="flex items-center gap-2 sm:gap-3 shrink-0">
               <div className="hidden md:flex items-center gap-1.5 text-xs text-muted-foreground border rounded-full px-3 py-1.5 bg-background/50"><span className="relative flex h-2 w-2"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-risk-safe opacity-75" /><span className="relative inline-flex rounded-full h-2 w-2 bg-risk-safe" /></span><span>{regionErrored ? 'Weather unavailable' : regionLoading ? 'Loading weather' : 'Live weather · updates every 15 min'}</span></div>
@@ -123,7 +123,7 @@ const Index = () => {
         <section><div className="grid gap-4 sm:gap-6 lg:grid-cols-2 items-start"><AlertList alerts={alerts} regionLabel={regionLabel} isLoading={regionLoading || eventsLoading} /><DistrictStats data={regionWeather} isLoading={regionLoading} regionLabel={regionLabel} /></div></section>
       </main>
 
-      <footer className="border-t mt-8 sm:mt-12 py-5 sm:py-6 bg-muted/30"><div className="container mx-auto px-4 flex flex-col items-center justify-center gap-1.5 text-center text-xs sm:text-sm text-muted-foreground"><span className="flex items-center gap-1.5"><Waves className="w-3.5 h-3.5" />AquaWatch</span><span>Live weather estimates · Nearby river-flow estimates · Reported events</span></div></footer>
+      <footer className="border-t mt-8 sm:mt-12 py-5 sm:py-6 bg-muted/30"><div className="container mx-auto px-4 flex flex-col items-center justify-center gap-1.5 text-center text-xs sm:text-sm text-muted-foreground"><span className="flex items-center gap-1.5"><Waves className="w-3.5 h-3.5" />AuraGuard</span><span>Live weather estimates · Nearby river-flow estimates · Reported events</span></div></footer>
     </div>
   );
 };

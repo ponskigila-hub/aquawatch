@@ -271,7 +271,7 @@ const OceanPage = () => {
           properties: rows[index],
         })),
       };
-      downloadFile(`aquawatch-marine-region-${timeTag}.geojson`, JSON.stringify(collection, null, 2), 'application/geo+json');
+      downloadFile(`auraguard-marine-region-${timeTag}.geojson`, JSON.stringify(collection, null, 2), 'application/geo+json');
       return;
     }
     const headers = Object.keys(rows[0] ?? {});
@@ -280,7 +280,7 @@ const OceanPage = () => {
       const text = value === null || value === undefined ? '' : String(value);
       return `"${text.replace(/"/g, '""')}"`;
     }).join(','))].join('\n');
-    downloadFile(`aquawatch-marine-region-${timeTag}.csv`, csv, 'text/csv;charset=utf-8');
+    downloadFile(`auraguard-marine-region-${timeTag}.csv`, csv, 'text/csv;charset=utf-8');
   };
 
   const statusBadges: Array<{ label: string; note: string; tone: string }> = [];
@@ -379,7 +379,7 @@ const OceanPage = () => {
           </div>
         </CardContent></Card>
 
-        <Card className="weather-panel"><CardHeader className="pb-2"><CardTitle className="flex items-center gap-2 text-base"><Anchor className="h-4 w-4 text-primary" />How to read the map</CardTitle></CardHeader><CardContent className="space-y-2 text-xs leading-relaxed text-muted-foreground"><p>Significant wave height describes the average of the highest third of waves. Swell height is the longer-period wave component. Current bearings point toward the flow; wave and swell bearings point from where waves arrive.</p><p>NOAA anomaly compares daily sea temperature with its 1971–2000 reference. The map legend shows the display range; values outside the range use the end color.</p><p>Model values are for general awareness only—not navigation, rescue, or safety advice. Follow official local marine warnings. No coordinates are sent to a server controlled by AquaWatch beyond the public weather data request itself.</p><p>Sources: <a href="https://open-meteo.com/en/docs/marine-weather-api" target="_blank" rel="noreferrer" className="font-medium text-primary underline">Open-Meteo Marine API</a> (CC BY 4.0) · <a href="https://www.ncei.noaa.gov/products/optimum-interpolation-sst" target="_blank" rel="noreferrer" className="font-medium text-primary underline">NOAA NCEI OISST</a>.</p></CardContent></Card>
+        <Card className="weather-panel"><CardHeader className="pb-2"><CardTitle className="flex items-center gap-2 text-base"><Anchor className="h-4 w-4 text-primary" />How to read the map</CardTitle></CardHeader><CardContent className="space-y-2 text-xs leading-relaxed text-muted-foreground"><p>Significant wave height describes the average of the highest third of waves. Swell height is the longer-period wave component. Current bearings point toward the flow; wave and swell bearings point from where waves arrive.</p><p>NOAA anomaly compares daily sea temperature with its 1971–2000 reference. The map legend shows the display range; values outside the range use the end color.</p><p>Model values are for general awareness only—not navigation, rescue, or safety advice. Follow official local marine warnings. No coordinates are sent to a server controlled by AuraGuard beyond the public weather data request itself.</p><p>Sources: <a href="https://open-meteo.com/en/docs/marine-weather-api" target="_blank" rel="noreferrer" className="font-medium text-primary underline">Open-Meteo Marine API</a> (CC BY 4.0) · <a href="https://www.ncei.noaa.gov/products/optimum-interpolation-sst" target="_blank" rel="noreferrer" className="font-medium text-primary underline">NOAA NCEI OISST</a>.</p></CardContent></Card>
       </aside>
     </div>
   </FeaturePageLayout>;

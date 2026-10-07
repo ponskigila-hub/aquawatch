@@ -1,4 +1,4 @@
-# AquaWatch data sources and limits
+# AuraGuard data sources and limits
 
 ## City weather and forecasts
 

@@ -1,6 +1,6 @@
 # Environmental feature data sources (verified 2026-10-02)
 
-This note records completed official-source checks from the AquaWatch feature research workflow. Forecast/model values are not ground observations or official safety warnings unless explicitly stated.
+This note records completed official-source checks from the AuraGuard feature research workflow. Forecast/model values are not ground observations or official safety warnings unless explicitly stated.
 
 ## Earthquakes and tsunami information
 
@@ -70,7 +70,7 @@ NOAA NCEI OISST v2.1 is the daily global 0.25° product, with SST (`sst`, °C), 
 
 ## Community observations and public water data
 
-No verified public write API exists for arbitrary users to post fresh geotagged observations; AquaWatch's current user pins are first-party browser-local records and are not shared or verified. EPA/USGS/NWQMC Water Quality Portal is a public, read-only dataset (`https://waterqualitydata.us/wqx3/Station/search` and `/Result/search`) of contributor measurements; preserve the contributing provider, sample date, result value and reported unit because records are discrete samples with contributor-dependent delay, not live community reports. CrowdHydrology provides volunteer staff-gauge stage readings at participating stations but no verified general posting API, and its current public station list/status is uncertain. Consent before device location or public reports; allow manual/coarse placement and avoid exposing identities. Sources: [CrowdHydrology](https://crowdhydrology.geology.buffalo.edu/), [University at Buffalo overview](https://www.buffalo.edu/news/releases/2013/06/025.html), [Water Quality Portal WQX API](https://www.waterqualitydata.us/beta/webservices_documentation/), [WQP user guide](https://www.waterqualitydata.us/portal_userguide/), [EPA data download guide](https://www.epa.gov/waterdata/water-quality-data-download).
+No verified public write API exists for arbitrary users to post fresh geotagged observations; AuraGuard's current user pins are first-party browser-local records and are not shared or verified. EPA/USGS/NWQMC Water Quality Portal is a public, read-only dataset (`https://waterqualitydata.us/wqx3/Station/search` and `/Result/search`) of contributor measurements; preserve the contributing provider, sample date, result value and reported unit because records are discrete samples with contributor-dependent delay, not live community reports. CrowdHydrology provides volunteer staff-gauge stage readings at participating stations but no verified general posting API, and its current public station list/status is uncertain. Consent before device location or public reports; allow manual/coarse placement and avoid exposing identities. Sources: [CrowdHydrology](https://crowdhydrology.geology.buffalo.edu/), [University at Buffalo overview](https://www.buffalo.edu/news/releases/2013/06/025.html), [Water Quality Portal WQX API](https://www.waterqualitydata.us/beta/webservices_documentation/), [WQP user guide](https://www.waterqualitydata.us/portal_userguide/), [EPA data download guide](https://www.epa.gov/waterdata/water-quality-data-download).
 
 ## GIS and cinematic tools source limits
 
